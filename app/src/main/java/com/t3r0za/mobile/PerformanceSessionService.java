@@ -21,7 +21,7 @@ import java.util.Set;
 public class PerformanceSessionService extends Service {
     static final int NOTIFICATION_ID = 9301;
     static final String CHANNEL_ID = "t3r0za_performance";
-    static final long CHECK_INTERVAL_MS = 1000L;
+    static final long CHECK_INTERVAL_MS = 2000L;
     static final String KEY_PEAK = "peak_refresh_rate";
     static final String KEY_MIN = "min_refresh_rate";
     static final String PREFS = "t3r0za";
@@ -84,34 +84,54 @@ public class PerformanceSessionService extends Service {
         }
     }
 
+    String lastKnownForegroundPackage = null;
+
     String foregroundPackage() {
         if (!usageAccessAllowed()) return null;
         try {
             android.app.usage.UsageStatsManager usm =
                 (android.app.usage.UsageStatsManager) getSystemService(USAGE_STATS_SERVICE);
-            if (usm == null) return null;
+            if (usm == null) return lastKnownForegroundPackage;
+
             long end = System.currentTimeMillis();
-            android.app.usage.UsageEvents events = usm.queryEvents(end - 5000L, end);
-            if (events == null) return null;
+            android.app.usage.UsageEvents events = usm.queryEvents(end - 15 * 60 * 1000L, end);
+            if (events == null) return lastKnownForegroundPackage;
+
             android.app.usage.UsageEvents.Event event =
                 new android.app.usage.UsageEvents.Event();
-            String lastPackage = null;
+
             long lastTime = 0L;
             while (events.hasNextEvent()) {
                 events.getNextEvent(event);
                 int type = event.getEventType();
+                if (type == android.app.usage.UsageEvents.Event.SCREEN_NON_INTERACTIVE) {
+                    lastKnownForegroundPackage = null;
+                    continue;
+                }
+
                 if (type == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND ||
                     (Build.VERSION.SDK_INT >= 29 &&
                      type == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED)) {
                     if (event.getTimeStamp() >= lastTime) {
                         lastTime = event.getTimeStamp();
-                        lastPackage = event.getPackageName();
+                        lastKnownForegroundPackage = event.getPackageName();
+                    }
+                    continue;
+                }
+
+                if (type == android.app.usage.UsageEvents.Event.MOVE_TO_BACKGROUND ||
+                    (Build.VERSION.SDK_INT >= 29 &&
+                     type == android.app.usage.UsageEvents.Event.ACTIVITY_PAUSED)) {
+                    if (event.getPackageName() != null &&
+                        event.getPackageName().equals(lastKnownForegroundPackage)) {
+                        lastKnownForegroundPackage = null;
                     }
                 }
             }
-            return lastPackage;
+
+            return lastKnownForegroundPackage;
         } catch (Exception e) {
-            return null;
+            return lastKnownForegroundPackage;
         }
     }
 
@@ -150,17 +170,19 @@ public class PerformanceSessionService extends Service {
 
     void applyForGame() {
         if (!canWriteSettings()) return;
-        saveOriginalSettings();
 
         int thermal = currentThermal();
         if (thermal >= PowerManager.THERMAL_STATUS_SEVERE) {
-            restoreOriginalSettings();
-            changedForGame = false;
+            if (changedForGame) restoreOriginalSettings();
             return;
         }
 
         float best = highestSupportedRefresh();
         if (best <= 0f) return;
+
+        if (changedForGame && Math.abs(appliedRate - best) < 0.5f) return;
+
+        saveOriginalSettings();
 
         boolean peakOk = writeRate(KEY_PEAK, best);
         boolean minOk = writeRate(KEY_MIN, best);
