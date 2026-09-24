@@ -3,6 +3,7 @@ package com.t3r0za.mobile;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.ActivityManager;
+import android.app.AppOpsManager;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -52,6 +53,8 @@ public class MainActivity extends Activity {
     int frameCount;
     float labFps;
     boolean runningLab=false;
+    boolean dnsLaunchBusy=false;
+    String pendingDns=null;
 
     int dp(float v){
         return (int)(v*getResources().getDisplayMetrics().density+0.5f);
@@ -210,9 +213,17 @@ public class MainActivity extends Activity {
         batt.setOnClickListener(v->batteryOptimization());
         pc.addView(batt,lp(0,8));
 
-        Button launch=btn("▶ OPEN FREE FIRE");
-        launch.setOnClickListener(v->launchFF());
+        Button launch=btn("▶ LAUNCH FREE FIRE + AUTO DNS SESSION");
+        launch.setOnClickListener(v->launchWithBestDns());
         pc.addView(launch,lp(0,8));
+
+        Button stopDns=btn("■ STOP DNS SESSION");
+        stopDns.setOnClickListener(v->stopDnsSession());
+        pc.addView(stopDns,lp(0,8));
+
+        Button usage=btn("⚙ ENABLE AUTO-STOP PERMISSION");
+        usage.setOnClickListener(v->openUsageAccess());
+        pc.addView(usage,lp(0,8));
 
         Button thermal=btn("🌡 THERMAL DETAIL");
         thermal.setOnClickListener(v->thermalInfo());
@@ -319,40 +330,114 @@ public class MainActivity extends Activity {
     };
 
     void runDnsBenchmark(){
-        setState("● DNS TEST RUNNING","در حال اندازه‌گیری resolverهای واقعی روی شبکه فعلی...",true);
+        benchmarkBestDns(false);
+    }
+
+    void launchWithBestDns(){
+        if(dnsLaunchBusy){
+            Toast.makeText(this,"DNS session is already starting",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        dnsLaunchBusy=true;
+        setState("● DNS BENCHMARK","قبل از بازشدن بازی، resolverهای واقعی یک‌بار تست می‌شوند...",true);
         new Thread(()->{
-            ArrayList<String> good=new ArrayList<>();
-            ArrayList<Long> times=new ArrayList<>();
-            for(String server:DNS_SERVERS){
-                long sum=0;
-                int ok=0;
-                for(int i=0;i<2;i++){
-                    long ms=dnsProbe(server,"example.com",1200);
-                    if(ms>=0){sum+=ms;ok++;}
-                }
-                if(ok>0){
-                    long avg=sum/ok;
-                    good.add(server+"  "+avg+" ms  "+ok+"/2");
-                    times.add(avg);
-                }
-            }
-            Collections.sort(good,(a,b)->Long.compare(extractMs(a),extractMs(b)));
-            StringBuilder out=new StringBuilder();
-            if(good.isEmpty()){
-                out.append("هیچ resolverی از این شبکه پاسخ قابل‌اعتماد نداد. DNS را عوض نکن؛ ابتدا خود اتصال را بررسی کن.");
-            }else{
-                out.append("TOP STABLE RESOLVERS\\n");
-                int n=Math.min(6,good.size());
-                for(int i=0;i<n;i++) out.append(i+1).append(". ").append(good.get(i)).append("\\n");
-                out.append("\\nاین عدد latency خود DNS lookup است، نه پینگ داخل مچ Free Fire.\\n");
-                out.append("برای جلوگیری از timeout، resolver انتخابی را وسط بازی تعویض نکن.");
-            }
-            final String result=out.toString();
+            String best=benchmarkAndChoose();
             handler.post(()->{
-                new AlertDialog.Builder(MainActivity.this).setTitle("DNS STABILITY RESULT").setMessage(result).setPositiveButton("OK",null).show();
-                setState("● DNS TEST COMPLETE","فهرست بر اساس پاسخ واقعی شبکه مرتب شد.",true);
+                dnsLaunchBusy=false;
+                if(best==null){
+                    setState("● DNS NOT SELECTED","هیچ resolver قابل‌اعتمادی از شبکه فعلی پاسخ نداد؛ بازی بدون DNS VPN اجرا می‌شود.",false);
+                    launchFF();
+                    return;
+                }
+                pendingDns=best;
+                setState("● DNS SELECTED",best+" انتخاب شد؛ قبل از ورود به بازی ثابت می‌ماند.",true);
+                Intent prep=VpnService.prepare(MainActivity.this);
+                if(prep!=null){
+                    startActivityForResult(prep,VPN_REQUEST);
+                }else{
+                    startDnsVpnAndLaunch();
+                }
             });
         }).start();
+    }
+
+    static final int VPN_REQUEST=7001;
+
+    void benchmarkBestDns(boolean showResult){
+        setState("● DNS TEST RUNNING","در حال تست resolverهای واقعی روی شبکه فعلی...",true);
+        new Thread(()->{
+            String best=benchmarkAndChoose();
+            final String result=best==null?
+                "هیچ resolverی پاسخ قابل‌اعتماد نداد. اتصال فعلی را بررسی کن.":
+                "BEST RESOLVER\\n"+best+"\\n\\nاین latency مربوط به DNS lookup است، نه ping داخل مچ."; 
+            handler.post(()->{
+                if(showResult || best!=null){
+                    new AlertDialog.Builder(MainActivity.this).setTitle("DNS STABILITY RESULT").setMessage(result).setPositiveButton("OK",null).show();
+                }
+                setState(best==null?"● DNS TEST FAILED":"● DNS TEST COMPLETE",best==null?"resolver قابل‌اعتماد پیدا نشد.":"بهترین resolver بر اساس پاسخ واقعی شبکه مشخص شد.",best!=null);
+            });
+        }).start();
+    }
+
+    String benchmarkAndChoose(){
+        ArrayList<String> candidates=new ArrayList<>(Arrays.asList(DNS_SERVERS));
+        ArrayList<String> good=new ArrayList<>();
+        for(String server:candidates){
+            long a=dnsProbe(server,"example.com",1200);
+            long b=dnsProbe(server,"connectivitycheck.gstatic.com",1200);
+            if(a>=0 && b>=0){
+                long avg=(a+b)/2L;
+                good.add(server+"|"+avg);
+            }
+        }
+        Collections.sort(good,(a,b)->Long.compare(extractMs(a.replace("|"," ")),extractMs(b.replace("|"," "))));
+        if(good.isEmpty()) return null;
+        String raw=good.get(0);
+        return raw.substring(0,raw.indexOf("|"));
+    }
+
+    void startDnsVpnAndLaunch(){
+        if(pendingDns==null || pendingDns.isEmpty()){
+            launchFF();
+            return;
+        }
+        Intent i=new Intent(this,DnsTunnelService.class);
+        i.putExtra(DnsTunnelService.EXTRA_DNS,pendingDns);
+        try{
+            if(Build.VERSION.SDK_INT>=26) startForegroundService(i); else startService(i);
+            setState("● DNS CONNECTING","DNS ثابت "+pendingDns+" در حال برقراری است؛ سپس Free Fire باز می‌شود.",true);
+            handler.postDelayed(()->{
+                launchFF();
+            },700);
+        }catch(Exception e){
+            setState("● DNS SESSION FAILED","VPN سیستم اجازه شروع نداد؛ بازی بدون این DNS اجرا می‌شود.",false);
+            launchFF();
+        }
+    }
+
+    void stopDnsSession(){
+        try{
+            stopService(new Intent(this,DnsTunnelService.class));
+            setState("● DNS SESSION OFF","DNS session قطع شد و مسیر شبکه به حالت سیستم برگشت.",true);
+        }catch(Exception ignored){}
+    }
+
+    boolean hasUsageAccess(){
+        try{
+            AppOpsManager ops=(AppOpsManager)getSystemService(APP_OPS_SERVICE);
+            int mode;
+            if(Build.VERSION.SDK_INT>=29) mode=ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS,android.os.Process.myUid(),getPackageName());
+            else mode=ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS,android.os.Process.myUid(),getPackageName());
+            return mode==AppOpsManager.MODE_ALLOWED;
+        }catch(Exception e){return false;}
+    }
+
+    void openUsageAccess(){
+        try{
+            startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS));
+        }catch(Exception e){
+            Toast.makeText(this,"Usage Access settings are not available",Toast.LENGTH_SHORT).show();
+        }
     }
 
     long extractMs(String s){
@@ -443,6 +528,18 @@ public class MainActivity extends Activity {
             }catch(Exception ignored){}
         }
         Toast.makeText(this,"Free Fire پیدا نشد",Toast.LENGTH_SHORT).show();
+    }
+
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
+        super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==VPN_REQUEST){
+            if(resultCode==RESULT_OK){
+                startDnsVpnAndLaunch();
+            }else{
+                setState("● VPN NOT APPROVED","بدون تأیید VPN، DNS سیستم تغییر نمی‌کند؛ بازی عادی اجرا می‌شود.",false);
+                launchFF();
+            }
+        }
     }
 
     @Override protected void onResume(){
