@@ -280,6 +280,20 @@ public class MainActivity extends Activity {
         }
     }
 
+    void scanFreeFire(){
+        String[] pkgs={"com.dts.freefireth","com.dts.freefiremax"};
+        for(String p:pkgs){
+            try{
+                android.content.pm.PackageInfo pi=getPackageManager().getPackageInfo(p,0);
+                long sizeMb=new java.io.File(pi.applicationInfo.sourceDir).length()/1048576;
+                String variant=p.equals("com.dts.freefiremax")?"FREE FIRE MAX":"FREE FIRE";
+                setStatus("● GAME SCAN: FOUND",variant+" • Version "+pi.versionName+" • APK "+sizeMb+"MB",true);
+                return;
+            }catch(android.content.pm.PackageManager.NameNotFoundException ignored){}
+        }
+        setStatus("● GAME SCAN: NOT FOUND","Free Fire روی دستگاه پیدا نشد.",false);
+    }
+
     void launchFF(){
         String[] pkgs={"com.dts.freefireth","com.dts.freefiremax"};
         for(String p:pkgs){
