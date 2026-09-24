@@ -275,6 +275,10 @@ public class MainActivity extends Activity {
         usage.setOnClickListener(v->openUsageAccess());
         pc.addView(usage,lp(0,8));
 
+        Button battery=btn("🔋 REQUEST BATTERY OPTIMIZATION EXEMPTION");
+        battery.setOnClickListener(v->requestBatteryOptimizationExemption());
+        pc.addView(battery,lp(0,8));
+
         root.addView(pc);
 
         root.addView(section("T3R0ZA CONTROL CORE"),lp(10,6));
@@ -743,6 +747,64 @@ public class MainActivity extends Activity {
 
         DnsBenchResult(String server){
             this.server=server;
+        }
+    }
+
+    void startDnsVpnAndLaunch(){
+        if(pendingDns==null || pendingDns.isEmpty()){
+            launchFF();
+            return;
+        }
+        getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putString("selected_dns",pendingDns).apply();
+        Intent i=new Intent(this,DnsTunnelService.class);
+        i.putExtra(DnsTunnelService.EXTRA_DNS,pendingDns);
+        try{
+            if(Build.VERSION.SDK_INT>=26) startForegroundService(i); else startService(i);
+            setState("● DNS CONNECTING","DNS ثابت "+pendingDns+" در حال برقراری است؛ وضعیت Tunnel قبل از اجرای بازی تأیید می‌شود.",true);
+            waitForDnsTunnelThenLaunch(0);
+        }catch(Exception e){
+            setState("● DNS SESSION FAILED","VPN سیستم اجازه شروع نداد؛ بازی بدون این DNS اجرا می‌شود.",false);
+            launchFF();
+        }
+    }
+
+    void waitForDnsTunnelThenLaunch(int attempt){
+        handler.postDelayed(()->{
+            DnsTunnelService s=DnsTunnelService.instance;
+            boolean ready=s!=null && s.running && s.vpnInterface!=null;
+            if(ready){
+                setState("● DNS READY","DNS Tunnel آماده و ثابت است؛ Free Fire اجرا شد.",true);
+                launchFF();
+                return;
+            }
+            if(attempt<5){
+                waitForDnsTunnelThenLaunch(attempt+1);
+                return;
+            }
+            try{stopService(new Intent(this,DnsTunnelService.class));}catch(Exception ignored){}
+            setState("● DNS NOT READY","Tunnel به‌موقع آماده نشد؛ بازی بدون DNS VPN اجرا می‌شود تا شبکه مختل نشود.",false);
+            launchFF();
+        },attempt==0?450:500);
+    }
+
+    void requestBatteryOptimizationExemption(){
+        PowerManager pm=(PowerManager)getSystemService(POWER_SERVICE);
+        try{
+            if(Build.VERSION.SDK_INT<23){
+                setState("● BATTERY POLICY N/A","این نسخه Android کنترل مستقیم این سیاست را ندارد.",true);
+                return;
+            }
+            if(pm.isIgnoringBatteryOptimizations(getPackageName())){
+                setState("● BATTERY POLICY OK","T3R0ZA از محدودیت Battery Optimization خارج است.",true);
+                return;
+            }
+            Intent i=new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            i.setData(Uri.parse("package:"+getPackageName()));
+            startActivity(i);
+            setState("● BATTERY PERMISSION REQUESTED","این مجوز اختیاری است و برای پایداری سرویس‌های خود T3R0ZA درخواست می‌شود.",true);
+        }catch(Exception e){
+            try{startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));}catch(Exception ignored){}
+            setState("● BATTERY SETTINGS OPENED","تنظیمات Battery Optimization باز شد.",true);
         }
     }
 
