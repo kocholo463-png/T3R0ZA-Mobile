@@ -60,7 +60,11 @@ public class MainActivity extends Activity {
     Runnable ticker;
     long lastFrameNs;
     int frameCount;
-    float labFps;
+    float panelFps;
+    Choreographer.FrameCallback frameMeterCallback;
+    long frameMeterLastNs=0L;
+    int frameMeterFrames=0;
+    boolean frameMeterRunning=false;
     boolean runningLab=false;
     boolean dnsLaunchBusy=false;
     String pendingDns=null;
@@ -132,6 +136,7 @@ public class MainActivity extends Activity {
         requestBestRefresh();
         buildHome();
         startTelemetry();
+        startFrameMeter();
         ensureMiniPanelOnStartup();
     }
 
@@ -241,22 +246,6 @@ public class MainActivity extends Activity {
         metrics.setTextColor(TEXT);
         mc.addView(metrics);
         root.addView(mc,lp(0,8));
-
-        root.addView(section("HEADSHOT LAB\nآزمایش کالیبراسیون نشانه‌گیری دستی"),lp(10,6));
-        LinearLayout hc=card();
-        TextView ht=tv("Manual Aim Calibration\nکالیبراسیون دستی نشانه‌گیری",18);
-        ht.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
-        hc.addView(ht);
-        TextView hd=tv("این بخش مسیر واقعی لمس خودت را اندازه می‌گیرد و برای کم‌کردن رد شدن از سر، overshoot و undershoot را تحلیل می‌کند.",10);
-        hd.setTextColor(MUTED);
-        hc.addView(hd,lp(3,10));
-        Button lab=btn("🎯 START HEADSHOT CALIBRATION\nشروع کالیبراسیون نشانه‌گیری");
-        lab.setTextSize(15);
-        lab.setTextColor(ACCENT);
-        lab.setBackground(bg(Color.rgb(12,48,42),18));
-        lab.setOnClickListener(v->showHeadshotLab());
-        hc.addView(lab,lp(0,8));
-        root.addView(hc);
 
         root.addView(section("DNS STABILITY LAB\nآزمایش پایداری DNS"),lp(10,6));
         LinearLayout dc=card();
@@ -530,38 +519,6 @@ public class MainActivity extends Activity {
         return "EMERGENCY";
     }
 
-    void startFrameMeter(){
-        if(frameMeterRunning) return;
-        frameMeterRunning=true;
-        frameMeterLastNs=0L;
-        frameMeterFrames=0;
-        frameMeterCallback=frameTimeNanos->{
-            if(!frameMeterRunning) return;
-            if(frameMeterLastNs>0L){
-                long elapsed=frameTimeNanos-frameMeterLastNs;
-                if(elapsed>=1000000000L){
-                    panelFps=frameMeterFrames*1000000000f/elapsed;
-                    frameMeterFrames=0;
-                    frameMeterLastNs=frameTimeNanos;
-                }else{
-                    frameMeterFrames++;
-                }
-            }else{
-                frameMeterLastNs=frameTimeNanos;
-            }
-            Choreographer.getInstance().postFrameCallback(frameMeterCallback);
-        };
-        Choreographer.getInstance().postFrameCallback(frameMeterCallback);
-    }
-
-    void stopFrameMeter(){
-        frameMeterRunning=false;
-        if(frameMeterCallback!=null){
-            try{Choreographer.getInstance().removeFrameCallback(frameMeterCallback);}catch(Exception ignored){}
-        }
-        frameMeterCallback=null;
-    }
-
     void requestBestRefreshAndReport(){
         requestBestRefresh();
         float hz=getWindowManager().getDefaultDisplay().getRefreshRate();
@@ -625,6 +582,38 @@ public class MainActivity extends Activity {
         setState("● NO-DNS MATCH MODE",
             "DNS VPN خاموش شد و مسیر شبکه به حالت عادی Android برگشت.",
             true);
+    }
+
+    void startFrameMeter(){
+        if(frameMeterRunning) return;
+        frameMeterRunning=true;
+        frameMeterLastNs=0L;
+        frameMeterFrames=0;
+        frameMeterCallback=frameTimeNanos->{
+            if(!frameMeterRunning) return;
+            if(frameMeterLastNs>0L){
+                long elapsed=frameTimeNanos-frameMeterLastNs;
+                if(elapsed>=1000000000L){
+                    panelFps=frameMeterFrames*1000000000f/elapsed;
+                    frameMeterFrames=0;
+                    frameMeterLastNs=frameTimeNanos;
+                }else{
+                    frameMeterFrames++;
+                }
+            }else{
+                frameMeterLastNs=frameTimeNanos;
+            }
+            Choreographer.getInstance().postFrameCallback(frameMeterCallback);
+        };
+        Choreographer.getInstance().postFrameCallback(frameMeterCallback);
+    }
+
+    void stopFrameMeter(){
+        frameMeterRunning=false;
+        if(frameMeterCallback!=null){
+            try{Choreographer.getInstance().removeFrameCallback(frameMeterCallback);}catch(Exception ignored){}
+        }
+        frameMeterCallback=null;
     }
 
     void fullPerformanceScan(){
