@@ -141,6 +141,7 @@ public class MainActivity extends Activity {
         stableDns=p.getBoolean("stableDns",stableDns);
         thermalGuard=p.getBoolean("thermalGuard",thermalGuard);
         performanceSession=p.getBoolean("performanceSession",performanceSession);
+        miniPanel=p.getBoolean("miniPanel",miniPanel);
     }
 
     static void applyMiniSwitch(String key,boolean value){
@@ -323,7 +324,23 @@ public class MainActivity extends Activity {
 
         addSwitchRow(cc,"MINI IN-GAME PANEL","پنل کوچک روی بازی؛ فقط کنترل‌های واقعی T3R0ZA مثل DNS، مانیتور و بازگشت به پنل.",miniPanel,(buttonView,isChecked)->{
             miniPanel=isChecked;
-            if(isChecked) startMiniPanelIfAllowed(); else stopMiniPanel();
+            getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("miniPanel",isChecked).apply();
+            if(isChecked){
+                if(Settings.canDrawOverlays(this)){
+                    startMiniPanelIfAllowed();
+                    setState("● MINI PANEL ON","پنل کوچک روی بازی فعال شد.",true);
+                }else{
+                    try{
+                        startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+getPackageName())));
+                        setState("● OVERLAY PERMISSION REQUIRED","مجوز نمایش روی برنامه‌های دیگر را فعال کن؛ بعد از برگشت، Mini Panel خودکار اجرا می‌شود.",true);
+                    }catch(Exception e){
+                        setState("● MINI PANEL UNAVAILABLE","صفحه مجوز Overlay روی این دستگاه در دسترس نیست.",false);
+                    }
+                }
+            }else{
+                stopMiniPanel();
+                setState("● MINI PANEL OFF","پنل کوچک خاموش شد.",true);
+            }
         });
 
         addSwitchRow(cc,"STABLE DNS SESSION","DNS فقط در صورت تأیید کاربر و برای Session مشخص؛ بدون تعویض مداوم.",stableDns,(buttonView,isChecked)->{
@@ -869,16 +886,17 @@ public class MainActivity extends Activity {
     }
 
     void toggleMiniPanel(){
+        miniPanel=true;
+        getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("miniPanel",true).apply();
         if(!Settings.canDrawOverlays(this)){
             try{
                 startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:"+getPackageName())));
-                Toast.makeText(this,"مجوز نمایش روی بازی را یک‌بار فعال کن.",Toast.LENGTH_LONG).show();
+                setState("● OVERLAY PERMISSION REQUIRED","مجوز نمایش روی برنامه‌های دیگر را فعال کن؛ بعد از برگشت، Mini Panel خودکار اجرا می‌شود.",true);
             }catch(Exception e){
-                Toast.makeText(this,"Overlay permission unavailable",Toast.LENGTH_SHORT).show();
+                setState("● MINI PANEL UNAVAILABLE","صفحه مجوز Overlay روی این دستگاه در دسترس نیست.",false);
             }
             return;
         }
-        miniPanel=true;
         startMiniPanelIfAllowed();
         setState("● MINI PANEL ON","پنل کوچک روی بازی فعال شد؛ هیچ auto-aim یا کنترل خودکار لمس ندارد.",true);
     }
@@ -892,6 +910,8 @@ public class MainActivity extends Activity {
     }
 
     void stopMiniPanel(){
+        miniPanel=false;
+        getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("miniPanel",false).apply();
         try{stopService(new Intent(this,MiniPanelService.class));}catch(Exception ignored){}
     }
 
