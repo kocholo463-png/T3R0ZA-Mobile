@@ -135,6 +135,40 @@ public class MiniPanelService extends Service {
         TextView state=miniText("LIVE CONTROL CORE\nکنترل زنده اصلی");
         box.addView(state);
 
+        LinearLayout quick=new LinearLayout(this);
+        quick.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button boost=smallButton("BOOST\nتقویت");
+        boost.setTextColor(Color.rgb(39,215,165));
+        boost.setOnClickListener(v->MainActivity.quickBoostFromMini());
+        quick.addView(boost,new LinearLayout.LayoutParams(0,dp(42),1));
+
+        Button noDns=smallButton("NO DNS\nبدون DNS");
+        noDns.setOnClickListener(v->MainActivity.noDnsFromMini());
+        quick.addView(noDns,new LinearLayout.LayoutParams(0,dp(42),1));
+
+        Button refresh=smallButton("MAX HZ\nبیشترین Hz");
+        refresh.setOnClickListener(v->MainActivity.refreshFromMini());
+        quick.addView(refresh,new LinearLayout.LayoutParams(0,dp(42),1));
+
+        box.addView(quick);
+
+        LinearLayout quick2=new LinearLayout(this);
+        quick2.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button touch=smallButton("TOUCH\nپاسخ لمس");
+        touch.setOnClickListener(v->MainActivity.touchLabFromMini());
+        quick2.addView(touch,new LinearLayout.LayoutParams(0,dp(38),1));
+
+        Button scan=smallButton("SCAN\nاسکن");
+        scan.setOnClickListener(v->openPanel());
+        quick2.addView(scan,new LinearLayout.LayoutParams(0,dp(38),1));
+
+        box.addView(quick2);
+        TextView telemetry=miniText("REFRESH -- Hz  •  THERMAL --\nنرخ نوسازی و دما");
+        telemetry.setTextColor(Color.rgb(86,183,255));
+        box.addView(telemetry);
+
         Button dns=smallButton("DNS\nدی‌ان‌اس");
         dns.setTextColor(Color.rgb(39,215,165));
         dns.setOnClickListener(v->toggleDns(dns,state));
@@ -169,7 +203,7 @@ public class MiniPanelService extends Service {
         });
         box.addView(guard,new LinearLayout.LayoutParams(-1,dp(32)));
 
-        TextView note=miniText("فقط قابلیت‌های واقعی Android؛ بدون auto-aim یا دستکاری بازی.");
+        TextView note=miniText("BOOST، REFRESH و NO-DNS فقط تنظیمات مجاز Android هستند؛ بدون auto-aim یا تغییر فایل بازی.");
         note.setTextColor(Color.rgb(139,157,169));
         box.addView(note);
 
@@ -218,11 +252,33 @@ public class MiniPanelService extends Service {
             stateTicker=()->{
                 boolean active=DnsTunnelService.instance!=null;
                 dnsOn=active;
-                dns.setText(active?"DNS ✓":"DNS");
+                dns.setText(active?"DNS ✓\nمتصل":"DNS\nدی‌ان‌اس");
                 live.setText(active?"●":"○");
                 live.setTextColor(active?Color.rgb(39,215,165):Color.rgb(139,157,169));
+
+                try{
+                    android.view.Display display=getSystemService(WINDOW_SERVICE)!=null
+                        ?((WindowManager)getSystemService(WINDOW_SERVICE)).getDefaultDisplay():null;
+                    float hz=display==null?0f:display.getRefreshRate();
+                    android.os.PowerManager pm=(android.os.PowerManager)getSystemService(POWER_SERVICE);
+                    String thermal="N/A";
+                    if(pm!=null && Build.VERSION.SDK_INT>=29){
+                        int th=pm.getCurrentThermalStatus();
+                        thermal=th<=android.os.PowerManager.THERMAL_STATUS_LIGHT?"NORMAL":
+                            th==android.os.PowerManager.THERMAL_STATUS_MODERATE?"MODERATE":
+                            th==android.os.PowerManager.THERMAL_STATUS_SEVERE?"SEVERE":
+                            th==android.os.PowerManager.THERMAL_STATUS_CRITICAL?"CRITICAL":"EMERGENCY";
+                    }
+                    android.app.ActivityManager am=(android.app.ActivityManager)getSystemService(ACTIVITY_SERVICE);
+                    android.app.ActivityManager.MemoryInfo mi=new android.app.ActivityManager.MemoryInfo();
+                    if(am!=null) am.getMemoryInfo(mi);
+                    long free=mi.availMem/1048576L;
+                    telemetry.setText("REFRESH "+String.format(java.util.Locale.US,"%.0f",hz)+" Hz  •  "+thermal+
+                        "\nنرخ نوسازی • دما • RAM آزاد "+free+" MB");
+                }catch(Exception ignored){}
+
                 if(attached){
-                    handler.postDelayed(stateTicker,1200);
+                    handler.postDelayed(stateTicker,1500);
                 }
             };
             handler.post(stateTicker);
