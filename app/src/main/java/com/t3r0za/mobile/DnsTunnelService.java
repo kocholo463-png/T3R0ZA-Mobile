@@ -33,9 +33,9 @@ public class DnsTunnelService extends VpnService {
 
     static final int DNS_TIMEOUT_MS=900;
     static final int DNS_HEALTH_INTERVAL_MS=5000;
-    static final long DNS_IDLE_STOP_MS=15000L;
-    static final long DNS_PREMATCH_MAX_MS=90000L;
-    static final long DNS_MIN_ACTIVE_MS=30000L;
+    static final long DNS_IDLE_STOP_MS=5000L;
+    static final long DNS_PREMATCH_MAX_MS=45000L;
+    static final long DNS_MIN_ACTIVE_MS=10000L;
     static final int MAX_CONSECUTIVE_HEALTH_FAILURES=3;
 
     ParcelFileDescriptor vpnInterface;
@@ -47,6 +47,7 @@ public class DnsTunnelService extends VpnService {
     volatile long lastDnsLatencyMs=-1;
     volatile long lastDnsPacketAtMs=0L;
     long tunnelStartedAtMs=0L;
+    long gameForegroundSinceMs=0L;
     boolean prematchOnly=false;
     volatile long lastHealthAtMs=0;
     String dns;
@@ -270,10 +271,20 @@ public class DnsTunnelService extends VpnService {
                     if(!running) break;
                 }
 
-                if(prematchOnly && now-tunnelStartedAtMs>=DNS_PREMATCH_MAX_MS){
-                    updateNotification("DNS PRE-MATCH LIMIT\nمحافظ قبل از Match: زمان نشست تمام شد");
-                    stopSelf();
-                    break;
+                if(prematchOnly){
+                    String fg=hasUsageAccess()?currentForegroundPackage():null;
+                    if(fg!=null && isGame(fg)){
+                        if(gameForegroundSinceMs==0L) gameForegroundSinceMs=now;
+                    }else if(fg!=null){
+                        gameForegroundSinceMs=0L;
+                    }
+
+                    if((gameForegroundSinceMs>0L && now-gameForegroundSinceMs>=30000L) ||
+                       now-tunnelStartedAtMs>=DNS_PREMATCH_MAX_MS){
+                        updateNotification("DNS PRE-MATCH END\nمحافظ قبل از Match: نشست DNS پیش‌ازمچ تمام شد");
+                        stopSelf();
+                        break;
+                    }
                 }
 
                 if(now-tunnelStartedAtMs>=DNS_MIN_ACTIVE_MS &&
