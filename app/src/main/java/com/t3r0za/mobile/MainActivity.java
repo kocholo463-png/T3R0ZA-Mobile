@@ -284,10 +284,10 @@ public class MainActivity extends Activity {
         root.addView(section("T3R0ZA CONTROL CORE"),lp(10,6));
         LinearLayout cc=card();
 
-        addSwitchRow(cc,"AUTO PERFORMANCE SESSION","پایش و درخواست نرخ نوسازی مناسب؛ بدون تغییر فایل یا حافظه بازی.",autoPerformance,v->{
-            autoPerformance=v;
-            getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("autoPerformance",v).apply();
-            if(v){
+        addSwitchRow(cc,"AUTO PERFORMANCE SESSION","پایش و درخواست نرخ نوسازی مناسب؛ بدون تغییر فایل یا حافظه بازی.",autoPerformance,(buttonView,isChecked)->{
+            autoPerformance=isChecked;
+            getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("autoPerformance",isChecked).apply();
+            if(isChecked){
                 getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 requestBestRefresh();
                 setState("● PERFORMANCE CORE ON","پایش عملکرد فعال است؛ فقط قابلیت‌های مجاز Android استفاده می‌شوند.",true);
@@ -297,27 +297,27 @@ public class MainActivity extends Activity {
             }
         });
 
-        addSwitchRow(cc,"LIVE INPUT MONITOR","اندازه‌گیری Touch event، jitter و touch-to-next-frame در پنل.",liveInput,v->{
-            liveInput=v;
-            getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("liveInput",v).apply();
-            setState(v?"● INPUT MONITOR ON":"● INPUT MONITOR OFF",v?"اندازه‌گیری ورودی فعال شد.":"اندازه‌گیری ورودی غیرفعال شد.",true);
+        addSwitchRow(cc,"LIVE INPUT MONITOR","اندازه‌گیری Touch event، jitter و touch-to-next-frame در پنل.",liveInput,(buttonView,isChecked)->{
+            liveInput=isChecked;
+            getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("liveInput",isChecked).apply();
+            setState(isChecked?"● INPUT MONITOR ON":"● INPUT MONITOR OFF",isChecked?"اندازه‌گیری ورودی فعال شد.":"اندازه‌گیری ورودی غیرفعال شد.",true);
         });
 
-        addSwitchRow(cc,"MINI IN-GAME PANEL","پنل کوچک روی بازی؛ فقط کنترل‌های واقعی T3R0ZA مثل DNS، مانیتور و بازگشت به پنل.",miniPanel,v->{
-            miniPanel=v;
-            if(v) startMiniPanelIfAllowed(); else stopMiniPanel();
+        addSwitchRow(cc,"MINI IN-GAME PANEL","پنل کوچک روی بازی؛ فقط کنترل‌های واقعی T3R0ZA مثل DNS، مانیتور و بازگشت به پنل.",miniPanel,(buttonView,isChecked)->{
+            miniPanel=isChecked;
+            if(isChecked) startMiniPanelIfAllowed(); else stopMiniPanel();
         });
 
-        addSwitchRow(cc,"STABLE DNS SESSION","DNS فقط در صورت تأیید کاربر و برای Session مشخص؛ بدون تعویض مداوم.",stableDns,v->{
-            stableDns=v;
-            getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("stableDns",v).apply();
-            setState(v?"● DNS SESSION ARMED":"● DNS SESSION OFF",v?"برای Session بعدی DNS پایدار فعال است.":"DNS VPN خودکار غیرفعال شد.",true);
+        addSwitchRow(cc,"STABLE DNS SESSION","DNS فقط در صورت تأیید کاربر و برای Session مشخص؛ بدون تعویض مداوم.",stableDns,(buttonView,isChecked)->{
+            stableDns=isChecked;
+            getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("stableDns",isChecked).apply();
+            setState(isChecked?"● DNS SESSION ARMED":"● DNS SESSION OFF",isChecked?"برای Session بعدی DNS پایدار فعال است.":"DNS VPN خودکار غیرفعال شد.",true);
         });
 
-        addSwitchRow(cc,"THERMAL GUARD","در فشار حرارتی بالا هشدار می‌دهد و از ادعای Boost غیرواقعی جلوگیری می‌کند.",thermalGuard,v->{
-            thermalGuard=v;
-            getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("thermalGuard",v).apply();
-            setState(v?"● THERMAL GUARD ON":"● THERMAL GUARD OFF",v?"محافظ حرارتی فعال است.":"محافظ حرارتی غیرفعال شد.",true);
+        addSwitchRow(cc,"THERMAL GUARD","در فشار حرارتی بالا هشدار می‌دهد و از ادعای Boost غیرواقعی جلوگیری می‌کند.",thermalGuard,(buttonView,isChecked)->{
+            thermalGuard=isChecked;
+            getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("thermalGuard",isChecked).apply();
+            setState(isChecked?"● THERMAL GUARD ON":"● THERMAL GUARD OFF",isChecked?"محافظ حرارتی فعال است.":"محافظ حرارتی غیرفعال شد.",true);
         });
 
         addSliderRow(cc,"MONITORING DEPTH","سبک", "عمیق", telemetryIntervalMs, 500, 3000, value->{
@@ -374,7 +374,7 @@ public class MainActivity extends Activity {
         seek.setMax(max-min);
         seek.setProgress(Math.max(0,Math.min(max-min,value-min)));
         seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
-            public void onProgressChanged(SeekBar b,int p,boolean fromUser){ if(fromUser) listener.accept(p+min); }
+            public void onProgressChanged(SeekBar b,int p,boolean fromUser){ if(fromUser) listener.onChange(p+min); }
             public void onStartTrackingTouch(SeekBar b){}
             public void onStopTrackingTouch(SeekBar b){}
         });
