@@ -16,6 +16,7 @@ import android.os.Looper;
 import android.os.PowerManager;
 import android.provider.Settings;
 import android.view.Display;
+import android.view.Choreographer;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.Window;
@@ -57,6 +58,11 @@ public class MainActivity extends Activity {
     boolean runningLab=false;
     boolean dnsLaunchBusy=false;
     String pendingDns=null;
+    boolean autoPerformance=true;
+    boolean liveInput=true;
+    boolean stableDns=false;
+    boolean thermalGuard=true;
+    int telemetryIntervalMs=1200;
 
     int dp(float v){
         return (int)(v*getResources().getDisplayMetrics().density+0.5f);
@@ -113,7 +119,6 @@ public class MainActivity extends Activity {
         super.onCreate(b);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         requestBestRefresh();
         buildHome();
         startTelemetry();
@@ -145,6 +150,7 @@ public class MainActivity extends Activity {
         title.setTextColor(ACCENT);
         title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         hero.addView(title);
+        pulseTitle(title);
         TextView sub=tv("PHONE HEADSHOT + PERFORMANCE LAB",11);
         sub.setTextColor(MUTED);
         hero.addView(sub,lp(2,0));
@@ -213,7 +219,7 @@ public class MainActivity extends Activity {
         pc.addView(scan,lp(0,8));
 
         Button launch=btn("▶ LAUNCH FREE FIRE + AUTO DNS SESSION");
-        launch.setOnClickListener(v->launchWithBestDns());
+        launch.setOnClickListener(v->{ if(stableDns) launchWithBestDns(); else launchFF(); });
         pc.addView(launch,lp(0,8));
 
         Button stopDns=btn("■ STOP DNS SESSION");
@@ -226,12 +232,103 @@ public class MainActivity extends Activity {
 
         root.addView(pc);
 
+        root.addView(section("T3R0ZA CONTROL CORE"),lp(10,6));
+        LinearLayout cc=card();
+
+        addSwitchRow(cc,"AUTO PERFORMANCE SESSION","پایش و درخواست نرخ نوسازی مناسب؛ بدون تغییر فایل یا حافظه بازی.",autoPerformance,v->{
+            autoPerformance=v;
+            if(v){
+                getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                requestBestRefresh();
+                setState("● PERFORMANCE CORE ON","پایش عملکرد فعال است؛ فقط قابلیت‌های مجاز Android استفاده می‌شوند.",true);
+            }else{
+                getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                setState("● PERFORMANCE CORE OFF","پایش خودکار غیرفعال شد.",true);
+            }
+        });
+
+        addSwitchRow(cc,"LIVE INPUT MONITOR","اندازه‌گیری Touch event، jitter و touch-to-next-frame در پنل.",liveInput,v->{
+            liveInput=v;
+            setState(v?"● INPUT MONITOR ON":"● INPUT MONITOR OFF",v?"اندازه‌گیری ورودی فعال شد.":"اندازه‌گیری ورودی غیرفعال شد.",true);
+        });
+
+        addSwitchRow(cc,"STABLE DNS SESSION","DNS فقط در صورت تأیید کاربر و برای Session مشخص؛ بدون تعویض مداوم.",stableDns,v->{
+            stableDns=v;
+            setState(v?"● DNS SESSION ARMED":"● DNS SESSION OFF",v?"برای Session بعدی DNS پایدار فعال است.":"DNS VPN خودکار غیرفعال شد.",true);
+        });
+
+        addSwitchRow(cc,"THERMAL GUARD","در فشار حرارتی بالا هشدار می‌دهد و از ادعای Boost غیرواقعی جلوگیری می‌کند.",thermalGuard,v->{
+            thermalGuard=v;
+            setState(v?"● THERMAL GUARD ON":"● THERMAL GUARD OFF",v?"محافظ حرارتی فعال است.":"محافظ حرارتی غیرفعال شد.",true);
+        });
+
+        addSliderRow(cc,"MONITORING DEPTH","سبک", "عمیق", telemetryIntervalMs, 500, 3000, value->{
+            telemetryIntervalMs=value;
+        });
+
+        addSliderRow(cc,"DISPLAY REQUEST","سیستم", "بالاترین", 100, 0, 100, value->{
+            if(value>=70) requestBestRefresh();
+        });
+
+        root.addView(cc);
+
         TextView note=tv("این برنامه نشانه‌گیری یا شلیک خودکار انجام نمی‌دهد. حساسیت بازی را مستقیماً دستکاری نمی‌کند؛ در عوض داده‌ی واقعی لمس و عملکرد گوشی را اندازه می‌گیرد تا تنظیم دستی قابل‌اعتمادتر شود.",9);
         note.setTextColor(MUTED);
         root.addView(note,lp(12,0));
 
         scroll.addView(root);
         setContentView(scroll);
+    }
+
+    void pulseTitle(TextView title){
+        title.animate().alpha(0.62f).setDuration(900).withEndAction(()->{
+            title.animate().alpha(1f).setDuration(900).withEndAction(()->pulseTitle(title)).start();
+        }).start();
+    }
+
+    void addSwitchRow(LinearLayout parent,String title,String desc,boolean checked,CompoundButton.OnCheckedChangeListener listener){
+        LinearLayout row=new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        LinearLayout textBox=new LinearLayout(this);
+        textBox.setOrientation(LinearLayout.VERTICAL);
+        TextView t=tv(title,13);
+        t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        textBox.addView(t);
+        TextView d=tv(desc,9);
+        d.setTextColor(MUTED);
+        textBox.addView(d,lp(2,0));
+        row.addView(textBox,new LinearLayout.LayoutParams(0,-2,1));
+        Switch sw=new Switch(this);
+        sw.setChecked(checked);
+        sw.setOnCheckedChangeListener(listener);
+        row.addView(sw);
+        parent.addView(row,lp(2,8));
+    }
+
+    void addSliderRow(LinearLayout parent,String title,String left,String right,int value,int min,int max,java.util.function.IntConsumer listener){
+        LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        TextView t=tv(title,13);
+        t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        box.addView(t);
+        SeekBar seek=new SeekBar(this);
+        seek.setMax(max-min);
+        seek.setProgress(Math.max(0,Math.min(max-min,value-min)));
+        seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            public void onProgressChanged(SeekBar b,int p,boolean fromUser){ if(fromUser) listener.accept(p+min); }
+            public void onStartTrackingTouch(SeekBar b){}
+            public void onStopTrackingTouch(SeekBar b){}
+        });
+        box.addView(seek);
+        LinearLayout labels=new LinearLayout(this);
+        labels.setOrientation(LinearLayout.HORIZONTAL);
+        TextView l=tv(left,9); l.setTextColor(MUTED);
+        TextView r=tv(right,9); r.setTextColor(MUTED);
+        labels.addView(l,new LinearLayout.LayoutParams(0,-2,1));
+        labels.addView(r);
+        box.addView(labels);
+        parent.addView(box,lp(8,8));
     }
 
     void setState(String a,String b,boolean good){
@@ -246,7 +343,7 @@ public class MainActivity extends Activity {
         stopTelemetry();
         ticker=()->{
             updateTelemetry();
-            handler.postDelayed(ticker,1200);
+            handler.postDelayed(ticker,telemetryIntervalMs);
         };
         handler.post(ticker);
     }
@@ -285,7 +382,7 @@ public class MainActivity extends Activity {
             "BATTERY OPT  "+(ignoring?"BYPASS ACTIVE":"SYSTEM MANAGED")
         );
 
-        if(thermal.equals("CRITICAL")||thermal.equals("EMERGENCY")){
+        if(thermalGuard && (thermal.equals("CRITICAL")||thermal.equals("EMERGENCY"))){
             setState("● THERMAL ALERT","دستگاه در محدوده فشار حرارتی بالا است؛ کالیبراسیون را بعد از خنک‌شدن انجام بده.",false);
         }else if(saver){
             setState("● POWER SAVER ON","Battery Saver می‌تواند عملکرد بازی را محدود کند.",false);
@@ -645,6 +742,9 @@ public class MainActivity extends Activity {
         long firstMoveMs;
         int samples;
         int trial=0;
+        long lastTouchDispatchNs=0;
+        boolean frameMeasurePending=false;
+        List<Float> touchFrameMs=new ArrayList<>();
         int totalTrials=12;
         int overshoots=0;
         int undershoots=0;
@@ -733,6 +833,7 @@ public class MainActivity extends Activity {
 
             if(e.getActionMasked()==MotionEvent.ACTION_DOWN){
                 active=true;
+                if(liveInput) measureTouchToNextFrame();
                 downMs=now;
                 firstMoveMs=0;
                 lastEventMs=now;
@@ -747,6 +848,7 @@ public class MainActivity extends Activity {
 
             if(e.getActionMasked()==MotionEvent.ACTION_MOVE){
                 if(!active) return true;
+                if(liveInput) measureTouchToNextFrame();
                 int n=e.getHistorySize();
                 for(int i=0;i<n;i++){
                     float hx=e.getHistoricalX(i);
@@ -828,7 +930,8 @@ public class MainActivity extends Activity {
                 "Undershoot trials    "+undershoots+" / "+totalTrials,
                 "Average swipe speed  "+String.format(Locale.US,"%.0f px/s",avgSpeed),
                 "Touch sample rate    "+(hz>0?String.format(Locale.US,"%.0f Hz",hz):"--"),
-                "Display refresh      "+String.format(Locale.US,"%.0f Hz",refresh)
+                "Display refresh      "+String.format(Locale.US,"%.0f Hz",refresh),
+                "Touch → next frame   "+(touchFrameMs.isEmpty()?"--":String.format(Locale.US,"%.1f ms",mean(touchFrameMs)))
             };
             for(String row:rows){
                 c.drawText(row,dp(18),dp(y),p);
@@ -848,6 +951,19 @@ public class MainActivity extends Activity {
             p.setColor(BLUE);
             p.setTextSize(dp(10));
             c.drawText("این نتیجه برای کالیبراسیون دستی است، نه auto-aim.",dp(18),getHeight()-dp(20),p);
+        }
+
+        void measureTouchToNextFrame(){
+            if(frameMeasurePending) return;
+            frameMeasurePending=true;
+            lastTouchDispatchNs=System.nanoTime();
+            Choreographer.getInstance().postFrameCallback(frameTimeNanos->{
+                if(lastTouchDispatchNs>0){
+                    float ms=(frameTimeNanos-lastTouchDispatchNs)/1000000f;
+                    if(ms>=0 && ms<100) touchFrameMs.add(ms);
+                }
+                frameMeasurePending=false;
+            });
         }
 
         String buildAdvice(float med,float touchHz,float refresh){
