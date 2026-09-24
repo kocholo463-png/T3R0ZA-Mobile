@@ -306,7 +306,7 @@ public class MainActivity extends Activity {
         parent.addView(row,lp(2,8));
     }
 
-    void addSliderRow(LinearLayout parent,String title,String left,String right,int value,int min,int max,java.util.function.IntConsumer listener){
+    void addSliderRow(LinearLayout parent,String title,String left,String right,int value,int min,int max,IntChangeListener listener){
         LinearLayout box=new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         TextView t=tv(title,13);
@@ -330,6 +330,8 @@ public class MainActivity extends Activity {
         box.addView(labels);
         parent.addView(box,lp(8,8));
     }
+
+    interface IntChangeListener { void onChange(int value); }
 
     void setState(String a,String b,boolean good){
         if(status!=null){
@@ -572,7 +574,7 @@ public class MainActivity extends Activity {
                 good.add(server+"|"+avg);
             }
         }
-        Collections.sort(good,(a,b)->Long.compare(extractMs(a.replace("|"," ")),extractMs(b.replace("|"," "))));
+        Collections.sort(good,(a,b)->Long.compare(extractMs(a),extractMs(b)));
         if(good.isEmpty()) return null;
         String raw=good.get(0);
         return raw.substring(0,raw.indexOf("|"));
@@ -614,9 +616,8 @@ public class MainActivity extends Activity {
 
     long extractMs(String s){
         try{
-            int p=s.lastIndexOf(" ms");
-            int q=s.lastIndexOf(" ",p-1);
-            return Long.parseLong(s.substring(q+1,p));
+            int p=s.lastIndexOf("|");
+            return Long.parseLong(s.substring(p+1));
         }catch(Exception e){return Long.MAX_VALUE;}
     }
 
@@ -641,7 +642,7 @@ public class MainActivity extends Activity {
     }
 
     byte[] buildDnsQuery(String host){
-        String[] labels=host.split("\\\\.");
+        String[] labels=host.split("\\.");
         byte[] b=new byte[512];
         int p=0;
         int id=(int)(System.nanoTime()&0xffff);
