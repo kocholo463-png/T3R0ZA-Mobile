@@ -135,6 +135,7 @@ public class MiniPanelService extends Service {
         box.addView(dns,new LinearLayout.LayoutParams(-1,dp(38)));
 
         addMiniSwitch(box,"AUTO PERFORMANCE", "autoPerformance", true, state);
+        addMiniSwitch(box,"GAME PERFORMANCE", "performanceSession", false, state);
         addMiniSwitch(box,"LIVE INPUT", "liveInput", false, state);
         addMiniSwitch(box,"STABLE DNS", "stableDns", false, state);
         addMiniSwitch(box,"THERMAL GUARD", "thermalGuard", true, state);
