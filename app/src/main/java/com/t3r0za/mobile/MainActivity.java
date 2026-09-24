@@ -250,16 +250,27 @@ public class MainActivity extends Activity {
         root.addView(section("PERFORMANCE CONTROL\nکنترل عملکرد"),lp(10,6));
         LinearLayout pc=card();
 
+        Button boost=btn("⚡ SAFE GAME BOOST\nتقویت امن بازی");
+        boost.setTextSize(15);
+        boost.setTextColor(ACCENT);
+        boost.setBackground(bg(Color.rgb(12,48,42),18));
+        boost.setOnClickListener(v->safeGameBoost());
+        pc.addView(boost);
+
+        Button touch=btn("✋ TOUCH RESPONSE TEST\nتست پاسخ لمس");
+        touch.setOnClickListener(v->showTouchResponseLab());
+        pc.addView(touch,lp(0,8));
+
+        Button matchDns=btn("🚫 NO-DNS MATCH MODE\nحالت مچ بدون DNS");
+        matchDns.setOnClickListener(v->enableNoDnsMatchMode());
+        pc.addView(matchDns,lp(0,8));
+
         Button ready=btn("⚡ GAME READY CHECK\nبررسی آماده‌بودن بازی");
         ready.setOnClickListener(v->gameReady());
         pc.addView(ready);
 
-        Button max=btn("⟳ REQUEST MAX DISPLAY REFRESH\nدرخواست بیشترین نرخ نوسازی نمایشگر");
-        max.setOnClickListener(v->{
-            requestBestRefresh();
-            updateTelemetry();
-            setState("● DISPLAY REFRESH REQUESTED","برای پنل آزمایش، بیشترین نرخ نوسازی گزارش‌شده درخواست شد.",true);
-        });
+        Button max=btn("⟳ MAX REFRESH REQUEST\nدرخواست بیشترین نرخ نوسازی");
+        max.setOnClickListener(v->requestBestRefreshAndReport());
         pc.addView(max,lp(0,8));
 
         Button scan=btn("🔎 FULL PERFORMANCE SCAN\nاسکن کامل عملکرد");
@@ -468,7 +479,7 @@ public class MainActivity extends Activity {
             "RAM       "+used+" / "+total+" MB\\n"+
             "BATTERY   "+batt+"%\\n"+
             "REFRESH   "+String.format(Locale.US,"%.0f",hz)+" Hz\\n"+
-            "LAB FPS   "+(labFps>0?String.format(Locale.US,"%.1f",labFps):"--")+" FPS\\n"+
+            "PANEL FPS "+(panelFps>0?String.format(Locale.US,"%.1f",panelFps):"--")+" FPS\\n"+
             "THERMAL   "+thermal+"\\n"+
             "POWER     "+(saver?"SAVER ON":"NORMAL")+"\\n"+
             "BATTERY OPT  "+(ignoring?"BYPASS ACTIVE":"SYSTEM MANAGED")
@@ -492,6 +503,103 @@ public class MainActivity extends Activity {
         if(s==PowerManager.THERMAL_STATUS_SEVERE) return "SEVERE";
         if(s==PowerManager.THERMAL_STATUS_CRITICAL) return "CRITICAL";
         return "EMERGENCY";
+    }
+
+    void startFrameMeter(){
+        if(frameMeterRunning) return;
+        frameMeterRunning=true;
+        frameMeterLastNs=0L;
+        frameMeterFrames=0;
+        frameMeterCallback=frameTimeNanos->{
+            if(!frameMeterRunning) return;
+            if(frameMeterLastNs>0L){
+                long elapsed=frameTimeNanos-frameMeterLastNs;
+                if(elapsed>=1000000000L){
+                    panelFps=frameMeterFrames*1000000000f/elapsed;
+                    frameMeterFrames=0;
+                    frameMeterLastNs=frameTimeNanos;
+                }else{
+                    frameMeterFrames++;
+                }
+            }else{
+                frameMeterLastNs=frameTimeNanos;
+            }
+            Choreographer.getInstance().postFrameCallback(frameMeterCallback);
+        };
+        Choreographer.getInstance().postFrameCallback(frameMeterCallback);
+    }
+
+    void stopFrameMeter(){
+        frameMeterRunning=false;
+        if(frameMeterCallback!=null){
+            try{Choreographer.getInstance().removeFrameCallback(frameMeterCallback);}catch(Exception ignored){}
+        }
+        frameMeterCallback=null;
+    }
+
+    void requestBestRefreshAndReport(){
+        requestBestRefresh();
+        float hz=getWindowManager().getDefaultDisplay().getRefreshRate();
+        setState("● REFRESH REQUESTED",
+            "درخواست "+String.format(Locale.US,"%.0f",hz)+"Hz ثبت شد؛ انتخاب نهایی را خود Android/device تعیین می‌کند.",
+            true);
+        updateTelemetry();
+    }
+
+    void safeGameBoost(){
+        try{stopService(new Intent(this,DnsTunnelService.class));}catch(Exception ignored){}
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        requestBestRefresh();
+
+        PowerManager pm=(PowerManager)getSystemService(POWER_SERVICE);
+        if(pm==null){
+            setState("● BOOST PARTIAL","DNS خاموش شد و نرخ نوسازی درخواست شد.",true);
+            return;
+        }
+
+        String thermal=thermalName(pm);
+        boolean saver=pm.isPowerSaveMode();
+
+        if(saver){
+            setState("● BOOST LIMITED",
+                "Power Saver روشن است؛ برای عملکرد بهتر، Battery Saver را از تنظیمات گوشی خاموش کن.",
+                false);
+            return;
+        }
+
+        if(thermal.equals("SEVERE")||thermal.equals("CRITICAL")||thermal.equals("EMERGENCY")){
+            setState("● BOOST BLOCKED BY THERMAL",
+                "فشار حرارتی بالاست؛ افزایش بار در این وضعیت می‌تواند پایداری را بدتر کند.",
+                false);
+            return;
+        }
+
+        if(Build.VERSION.SDK_INT>=23 && Settings.System.canWrite(this) && hasUsageAccess()){
+            try{
+                Intent i=new Intent(this,PerformanceSessionService.class);
+                if(Build.VERSION.SDK_INT>=26) startForegroundService(i); else startService(i);
+                performanceSession=true;
+                getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("performanceSession",true).apply();
+                setState("● SAFE GAME BOOST ON",
+                    "DNS برای مچ خاموش شد، نرخ نوسازی درخواست شد و نشست عملکرد فعال است.",
+                    true);
+            }catch(Exception e){
+                setState("● BOOST PARTIAL",
+                    "DNS خاموش شد و نرخ نوسازی درخواست شد؛ سرویس عملکرد شروع نشد.",
+                    true);
+            }
+        }else{
+            setState("● BOOST PARTIAL",
+                "DNS خاموش شد و نرخ نوسازی درخواست شد. برای مدیریت خودکار هنگام بازی، مجوزهای لازم Android را باید خودت فعال کنی.",
+                true);
+        }
+    }
+
+    void enableNoDnsMatchMode(){
+        try{stopService(new Intent(this,DnsTunnelService.class));}catch(Exception ignored){}
+        setState("● NO-DNS MATCH MODE",
+            "DNS VPN خاموش شد و مسیر شبکه به حالت عادی Android برگشت.",
+            true);
     }
 
     void fullPerformanceScan(){
@@ -1030,71 +1138,67 @@ public class MainActivity extends Activity {
     @Override protected void onPause(){
         super.onPause();
         stopTelemetry();
+        stopFrameMeter();
     }
 
     @Override protected void onDestroy(){
         stopTelemetry();
+        stopFrameMeter();
         if(instance==this) instance=null;
         super.onDestroy();
     }
 
-    void showHeadshotLab(){
+    void showTouchResponseLab(){
         runningLab=true;
         stopTelemetry();
-        HeadshotView hv=new HeadshotView();
+
+        TouchResponseView touchView=new TouchResponseView();
         LinearLayout page=new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setBackgroundColor(BG);
         page.setPadding(dp(14),dp(16),dp(14),dp(18));
 
         LinearLayout top=card();
-        TextView title=tv("HEADSHOT CALIBRATION",22);
+        TextView title=tv("TOUCH RESPONSE\nپاسخ لمس",22);
         title.setTextColor(ACCENT);
         title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         top.addView(title);
-        TextView info=tv("۱۲ حرکت دستی. هدف را با انگشت بگیر؛ برنامه سرعت، overshoot، undershoot، خطای پایان و نرخ نمونه‌برداری لمس را واقعی اندازه می‌گیرد.",10);
+        TextView info=tv("این تست فقط پاسخ واقعی لمس دستگاه را اندازه می‌گیرد: نرخ نمونه‌برداری لمس، نوسان زمان حرکت و فاصله Touch تا فریم بعدی. هیچ لمس یا نشانه‌گیری خودکاری انجام نمی‌شود.",10);
         info.setTextColor(MUTED);
         top.addView(info,lp(2,0));
         page.addView(top,lp(0,8));
-
-        page.addView(hv,new LinearLayout.LayoutParams(-1,0,1));
+        page.addView(touchView,new LinearLayout.LayoutParams(-1,0,1));
 
         Button back=btn("← BACK TO PANEL\nبازگشت به پنل");
-        back.setOnClickListener(v->{runningLab=false;buildHome();startTelemetry();});
+        back.setOnClickListener(v->{runningLab=false;buildHome();startFrameMeter();startTelemetry();});
         page.addView(back,lp(0,8));
         setContentView(page);
     }
 
-    class HeadshotView extends View {
+    class TouchResponseView extends View{
         Paint p=new Paint(3);
-        Paint line=new Paint(3);
-        float tx,ty,sx,sy;
-        boolean active;
-        long downMs;
-        long lastEventMs;
-        long firstMoveMs;
-        int samples;
+        float tx;
+        float ty;
         int trial=0;
-        long lastTouchDispatchNs=0;
-        boolean frameMeasurePending=false;
-        List<Float> touchFrameMs=new ArrayList<>();
-        int totalTrials=12;
-        int overshoots=0;
-        int undershoots=0;
-        float startToTarget;
-        float maxProjection;
-        float finalError;
-        List<Float> errors=new ArrayList<>();
-        List<Float> speeds=new ArrayList<>();
-        List<Float> sampleHz=new ArrayList<>();
+        int totalTrials=8;
+        boolean active=false;
+        long downNs=0L;
+        long firstFrameNs=0L;
+        long lastEventNs=0L;
+        int samplesInTrial=0;
+        int totalSamples=0;
+        float startX;
+        float startY;
+        ArrayList<Float> intervals=new ArrayList<>();
+        ArrayList<Float> frameDelays=new ArrayList<>();
+        ArrayList<Float> speeds=new ArrayList<>();
         boolean finished=false;
 
-        HeadshotView(){
+        TouchResponseView(){
             super(MainActivity.this);
-            p.setTypeface(Typeface.DEFAULT);
-            line.setStrokeWidth(dp(2));
             setBackgroundColor(Color.rgb(8,16,22));
-            post(()->nextTarget());
+            setFocusable(false);
+            post(this::nextTarget);
         }
 
         void nextTarget(){
@@ -1110,11 +1214,9 @@ public class MainActivity extends Activity {
                 postDelayed(this::nextTarget,100);
                 return;
             }
-            float margin=dp(52);
-            sx=w*0.5f;
-            sy=h*0.78f;
-            float[] xs={0.23f,0.38f,0.50f,0.62f,0.77f,0.30f,0.70f,0.42f,0.58f,0.20f,0.80f,0.50f};
-            float[] ys={0.34f,0.28f,0.22f,0.28f,0.34f,0.18f,0.18f,0.12f,0.12f,0.42f,0.42f,0.08f};
+            float[] xs={0.20f,0.50f,0.80f,0.30f,0.70f,0.18f,0.82f,0.50f};
+            float[] ys={0.20f,0.12f,0.20f,0.38f,0.38f,0.58f,0.58f,0.78f};
+            float margin=dp(48);
             tx=Math.max(margin,Math.min(w-margin,w*xs[trial-1]));
             ty=Math.max(margin,Math.min(h-margin,h*ys[trial-1]));
             active=false;
@@ -1123,237 +1225,111 @@ public class MainActivity extends Activity {
 
         @Override protected void onDraw(Canvas c){
             super.onDraw(c);
-            if(finished){
-                drawResults(c);
-                return;
-            }
-            p.setStyle(Paint.Style.STROKE);
-            p.setStrokeWidth(dp(2));
-            p.setColor(Color.rgb(47,74,88));
-            c.drawRoundRect(dp(8),dp(8),getWidth()-dp(8),getHeight()-dp(8),dp(18),dp(18),p);
-
             p.setStyle(Paint.Style.FILL);
             p.setColor(Color.rgb(18,39,48));
-            c.drawCircle(sx,sy,dp(38),p);
-
+            c.drawCircle(getWidth()/2f,getHeight()*0.82f,dp(17),p);
             p.setColor(ACCENT);
-            c.drawCircle(tx,ty,dp(22),p);
+            c.drawCircle(tx,ty,dp(24),p);
             p.setColor(BG);
             c.drawCircle(tx,ty,dp(9),p);
 
-            if(active){
-                p.setColor(BLUE);
-                p.setStyle(Paint.Style.STROKE);
-                p.setStrokeWidth(dp(3));
-                c.drawLine(sx,sy,tx,ty,p);
-                p.setStyle(Paint.Style.FILL);
-                p.setColor(Color.argb(180,255,255,255));
-                c.drawCircle(sx,sy,dp(7),p);
-            }
-
             p.setColor(TEXT);
             p.setTextSize(dp(14));
-            c.drawText("TRIAL "+trial+" / "+totalTrials,dp(18),dp(28),p);
-            p.setTextSize(dp(11));
+            c.drawText(finished?"TOUCH RESULT":"TOUCH TEST "+trial+" / "+totalTrials,dp(18),dp(28),p);
+
             p.setColor(MUTED);
-            c.drawText("START پایین صفحه → FLICK طبیعی به نقطه سبز",dp(18),dp(48),p);
+            p.setTextSize(dp(10));
+            c.drawText(active?"انگشت را نرم حرکت بده":"از نقطه پایین به نقطه سبز حرکت کن",dp(18),dp(48),p);
+
+            if(finished){
+                float y=dp(88);
+                p.setColor(TEXT);
+                p.setTextSize(dp(14));
+                c.drawText("مدین فاصله لمس تا فریم بعدی: "+fmt(median(frameDelays))+" ms",dp(18),y,p);
+                y+=dp(26);
+                c.drawText("مدین فاصله رویدادهای لمس: "+fmt(median(intervals))+" ms",dp(18),y,p);
+                y+=dp(26);
+                c.drawText("تعداد نمونه‌های لمس: "+totalSamples,dp(18),y,p);
+                y+=dp(26);
+                c.drawText("سرعت متوسط حرکت: "+String.format(Locale.US,"%.0f",median(speeds))+" px/s",dp(18),y,p);
+                y+=dp(34);
+                p.setColor(WARN);
+                p.setTextSize(dp(11));
+                c.drawText("این تست برای سنجش کیفیت ورودی است، نه تغییر خودکار Aim.",dp(18),y,p);
+                y+=dp(18);
+                p.setColor(MUTED);
+                c.drawText("Touch latency و sensitivity بازی از یک اپ عادی Android",dp(18),y,p);
+                y+=dp(18);
+                c.drawText("قابل اجبار نیستند؛ ابزار فقط نقطه ضعف واقعی دستگاه را نشان می‌دهد.",dp(18),y,p);
+            }
+        }
+
+        String fmt(float v){
+            return v<0?"--":String.format(Locale.US,"%.1f",v);
+        }
+
+        float median(ArrayList<Float> values){
+            if(values.isEmpty()) return -1f;
+            ArrayList<Float> a=new ArrayList<>(values);
+            Collections.sort(a);
+            int m=a.size()/2;
+            return a.size()%2==1?a.get(m):(a.get(m-1)+a.get(m))*0.5f;
         }
 
         @Override public boolean onTouchEvent(MotionEvent e){
-            long now=e.getEventTime();
-            float x=e.getX();
-            float y=e.getY();
+            long nowNs=System.nanoTime();
+            int action=e.getActionMasked();
 
-            if(e.getActionMasked()==MotionEvent.ACTION_DOWN){
+            if(action==MotionEvent.ACTION_DOWN){
                 active=true;
-                if(liveInput) measureTouchToNextFrame();
-                downMs=now;
-                firstMoveMs=0;
-                lastEventMs=now;
-                samples=0;
-                maxProjection=0;
-                startToTarget=(float)Math.hypot(tx-x,ty-y);
-                sx=x;
-                sy=y;
+                downNs=nowNs;
+                firstFrameNs=0L;
+                lastEventNs=nowNs;
+                samplesInTrial=1;
+                totalSamples++;
+                startX=e.getX();
+                startY=e.getY();
+                final long start=nowNs;
+                Choreographer.getInstance().postFrameCallback(frameTimeNs->{
+                    if(active && firstFrameNs==0L){
+                        firstFrameNs=System.nanoTime();
+                        float ms=(firstFrameNs-start)/1000000f;
+                        if(ms>=0f && ms<100f) frameDelays.add(ms);
+                    }
+                });
                 invalidate();
                 return true;
             }
 
-            if(e.getActionMasked()==MotionEvent.ACTION_MOVE){
-                if(!active) return true;
-                if(liveInput) measureTouchToNextFrame();
-                int n=e.getHistorySize();
-                for(int i=0;i<n;i++){
-                    float hx=e.getHistoricalX(i);
-                    float hy=e.getHistoricalY(i);
-                    recordPoint(hx,hy,e.getHistoricalEventTime(i));
-                }
-                recordPoint(x,y,now);
-                invalidate();
+            if(action==MotionEvent.ACTION_MOVE && active){
+                samplesInTrial++;
+                totalSamples++;
+                long delta=nowNs-lastEventNs;
+                if(delta>0L && delta<250000000L) intervals.add(delta/1000000f);
+                lastEventNs=nowNs;
+                float dist=(float)Math.hypot(e.getX()-startX,e.getY()-startY);
+                float sec=Math.max(0.001f,(nowNs-downNs)/1000000000f);
+                speeds.add(dist/sec);
                 return true;
             }
 
-            if(e.getActionMasked()==MotionEvent.ACTION_UP||e.getActionMasked()==MotionEvent.ACTION_CANCEL){
+            if(action==MotionEvent.ACTION_UP || action==MotionEvent.ACTION_CANCEL){
                 if(!active) return true;
-                recordPoint(x,y,now);
-                analyzeTrial(x,y,now);
                 active=false;
-                invalidate();
-                postDelayed(this::nextTarget,180);
+                if(firstFrameNs==0L){
+                    float ms=(System.nanoTime()-downNs)/1000000f;
+                    if(ms>=0f && ms<100f) frameDelays.add(ms);
+                }
+                if(trial<totalTrials) postDelayed(this::nextTarget,120);
+                else{
+                    finished=true;
+                    invalidate();
+                }
                 return true;
             }
+
             return true;
         }
-
-        void recordPoint(float x,float y,long time){
-            samples++;
-            if(firstMoveMs==0 && time>downMs+1) firstMoveMs=time;
-            if(lastEventMs>0 && time>lastEventMs){
-                long dt=time-lastEventMs;
-                if(dt>0 && dt<200) sampleHz.add(1000f/dt);
-            }
-            lastEventMs=time;
-            float dx=tx-sx;
-            float dy=ty-sy;
-            float len=(float)Math.hypot(dx,dy);
-            if(len>1){
-                float px=x-sx;
-                float py=y-sy;
-                float projection=(px*dx+py*dy)/len;
-                if(projection>maxProjection) maxProjection=projection;
-            }
-        }
-
-        void analyzeTrial(float x,float y,long upMs){
-            finalError=(float)Math.hypot(tx-x,ty-y);
-            errors.add(finalError);
-            long dt=Math.max(1,upMs-downMs);
-            speeds.add(startToTarget/(dt/1000f));
-
-            if(maxProjection > startToTarget*1.10f) overshoots++;
-            else if(finalError > dp(34) && maxProjection < startToTarget*0.88f) undershoots++;
-        }
-
-        void drawResults(Canvas c){
-            p.setStyle(Paint.Style.FILL);
-            p.setColor(TEXT);
-            p.setTextSize(dp(23));
-            c.drawText("CALIBRATION COMPLETE",dp(18),dp(38),p);
-
-            float avg=mean(errors);
-            float med=median(errors);
-            float avgSpeed=mean(speeds);
-            float hz=mean(sampleHz);
-            float refresh=getWindowManager().getDefaultDisplay().getRefreshRate();
-
-            float score=Math.max(0,100f-(med/(dp(22))*35f)-(overshoots*3f)-(undershoots*2f));
-            String advice=buildAdvice(med,hz,refresh);
-
-            p.setTextSize(dp(13));
-            p.setColor(ACCENT);
-            c.drawText("CONTROL SCORE  "+String.format(Locale.US,"%.0f",score)+"/100",dp(18),dp(70),p);
-
-            p.setColor(TEXT);
-            p.setTextSize(dp(12));
-            int y=104;
-            String[] rows={
-                "Median end error     "+String.format(Locale.US,"%.1f px",med),
-                "Average end error    "+String.format(Locale.US,"%.1f px",avg),
-                "Overshoot trials     "+overshoots+" / "+totalTrials,
-                "Undershoot trials    "+undershoots+" / "+totalTrials,
-                "Average swipe speed  "+String.format(Locale.US,"%.0f px/s",avgSpeed),
-                "Touch sample rate    "+(hz>0?String.format(Locale.US,"%.0f Hz",hz):"--"),
-                "Display refresh      "+String.format(Locale.US,"%.0f Hz",refresh),
-                "Touch → next frame   "+(touchFrameMs.isEmpty()?"--":String.format(Locale.US,"%.1f ms",mean(touchFrameMs)))
-            };
-            for(String row:rows){
-                c.drawText(row,dp(18),dp(y),p);
-                y+=dp(24);
-            }
-
-            p.setColor(WARN);
-            c.drawText("RECOMMENDATION",dp(18),dp(y+10),p);
-            p.setColor(TEXT);
-            p.setTextSize(dp(11));
-            y+=dp(34);
-            for(String lineText:wrap(advice,42)){
-                c.drawText(lineText,dp(18),dp(y),p);
-                y+=dp(18);
-            }
-
-            p.setColor(BLUE);
-            p.setTextSize(dp(10));
-            c.drawText("این نتیجه برای کالیبراسیون دستی است، نه auto-aim.",dp(18),getHeight()-dp(20),p);
-        }
-
-        void measureTouchToNextFrame(){
-            if(frameMeasurePending) return;
-            frameMeasurePending=true;
-            lastTouchDispatchNs=System.nanoTime();
-            Choreographer.getInstance().postFrameCallback(frameTimeNanos->{
-                if(lastTouchDispatchNs>0){
-                    float ms=(frameTimeNanos-lastTouchDispatchNs)/1000000f;
-                    if(ms>=0 && ms<100) touchFrameMs.add(ms);
-                }
-                frameMeasurePending=false;
-            });
-        }
-
-        String buildAdvice(float med,float touchHz,float refresh){
-            StringBuilder s=new StringBuilder();
-            if(overshoots>=4){
-                s.append("حرکت‌ها بیشتر از هدف عبور می‌کنند؛ حساسیت فعلی احتمالاً برای حرکت‌های سریع بالاست. ");
-            }else if(undershoots>=4){
-                s.append("بخش زیادی از حرکت‌ها قبل از ناحیه هدف متوقف می‌شوند؛ حساسیت فعلی احتمالاً پایین است. ");
-            }else{
-                s.append("رد شدن و کم‌رسیدن متعادل است؛ تغییرات کوچک بهتر از تغییر شدید هستند. ");
-            }
-
-            if(touchHz>0 && refresh>0 && touchHz<refresh*0.55f){
-                s.append("نرخ نمونه‌برداری لمس از نرخ نوسازی خیلی عقب‌تر است؛ محدودیت ورودی را جدا از حساسیت در نظر بگیر. ");
-            }else{
-                s.append("مسیر لمس برای کالیبراسیون مناسب ثبت شده است. ");
-            }
-
-            float base=1f;
-            if(overshoots>=4) base=0.95f;
-            else if(overshoots>=3) base=0.97f;
-            else if(undershoots>=4) base=1.05f;
-            else if(undershoots>=3) base=1.03f;
-
-            s.append("ضریب شروع پیشنهادی: ").append(String.format(Locale.US,"%.2fx",base)).append(" نسبت به حساسیت فعلی، سپس دوباره تست کن.");
-            return s.toString();
-        }
-
-        List<String> wrap(String s,int width){
-            List<String> out=new ArrayList<>();
-            String[] words=s.split(" ");
-            String line="";
-            for(String word:words){
-                if((line+" "+word).trim().length()>width){
-                    out.add(line);
-                    line=word;
-                }else{
-                    line=(line+" "+word).trim();
-                }
-            }
-            if(!line.isEmpty()) out.add(line);
-            return out;
-        }
-
-        float mean(List<Float> xs){
-            if(xs.isEmpty()) return 0;
-            float sum=0;
-            for(float x:xs) sum+=x;
-            return sum/xs.size();
-        }
-
-        float median(List<Float> xs){
-            if(xs.isEmpty()) return 0;
-            ArrayList<Float> a=new ArrayList<>(xs);
-            Collections.sort(a);
-            int m=a.size()/2;
-            return a.size()%2==1?a.get(m):(a.get(m-1)+a.get(m))/2f;
-        }
     }
+
 }
