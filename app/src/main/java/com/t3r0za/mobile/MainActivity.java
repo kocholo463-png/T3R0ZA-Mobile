@@ -68,6 +68,7 @@ public class MainActivity extends Activity {
     boolean liveInput=true;
     boolean stableDns=false;
     boolean thermalGuard=true;
+    boolean performanceSession=false;
     boolean miniPanel=false;
     int telemetryIntervalMs=1200;
 
@@ -139,6 +140,7 @@ public class MainActivity extends Activity {
         liveInput=p.getBoolean("liveInput",liveInput);
         stableDns=p.getBoolean("stableDns",stableDns);
         thermalGuard=p.getBoolean("thermalGuard",thermalGuard);
+        performanceSession=p.getBoolean("performanceSession",performanceSession);
     }
 
     static void applyMiniSwitch(String key,boolean value){
@@ -262,6 +264,9 @@ public class MainActivity extends Activity {
         Button launch=btn("▶ LAUNCH FREE FIRE + AUTO DNS SESSION");
         launch.setOnClickListener(v->{ if(stableDns) launchWithBestDns(); else launchFF(); });
         pc.addView(launch,lp(0,8));
+        Button perf=btn("⚡ START GAME PERFORMANCE SESSION");
+        perf.setOnClickListener(v->startPerformanceSession());
+        pc.addView(perf,lp(0,8));
 
         Button stopDns=btn("■ STOP DNS SESSION");
         stopDns.setOnClickListener(v->stopDnsSession());
@@ -294,6 +299,16 @@ public class MainActivity extends Activity {
             }else{
                 getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 setState("● PERFORMANCE CORE OFF","پایش خودکار غیرفعال شد.",true);
+            }
+        });
+
+        addSwitchRow(cc,"GAME PERFORMANCE SESSION","نرخ نوسازی دستگاه را فقط هنگام اجرای Free Fire و با مجوز سیستم مدیریت می‌کند.",performanceSession,(buttonView,isChecked)->{
+            performanceSession=isChecked;
+            getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("performanceSession",isChecked).apply();
+            if(isChecked){
+                startPerformanceSession();
+            }else{
+                stopPerformanceSession();
             }
         });
 
@@ -781,6 +796,45 @@ public class MainActivity extends Activity {
             setState("● DNS NOT READY","Tunnel به‌موقع آماده نشد؛ بازی بدون DNS VPN اجرا می‌شود تا شبکه مختل نشود.",false);
             launchFF();
         },attempt==0?450:500);
+    }
+
+    void startPerformanceSession(){
+        if(Build.VERSION.SDK_INT>=23 && !Settings.System.canWrite(this)){
+            try{
+                Intent i=new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS);
+                i.setData(Uri.parse("package:"+getPackageName()));
+                startActivity(i);
+                setState("● SYSTEM REFRESH PERMISSION","مجوز تغییر System Display را فعال کن تا Session بتواند نرخ نوسازی واقعی دستگاه را مدیریت کند.",true);
+            }catch(Exception e){
+                setState("● SYSTEM REFRESH UNAVAILABLE","صفحه مجوز System Settings در این دستگاه در دسترس نیست.",false);
+            }
+            return;
+        }
+
+        if(!hasUsageAccess()){
+            openUsageAccess();
+            setState("● USAGE ACCESS REQUIRED","برای تشخیص خودکار ورود و خروج Free Fire، Usage Access لازم است.",false);
+            return;
+        }
+
+        Intent i=new Intent(this,PerformanceSessionService.class);
+        try{
+            if(Build.VERSION.SDK_INT>=26) startForegroundService(i); else startService(i);
+            getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("performanceSession",true).apply();
+            performanceSession=true;
+            setState("● GAME PERFORMANCE ON","حالت تطبیقی فعال است؛ فقط هنگام حضور Free Fire روی Foreground اعمال می‌شود.",true);
+        }catch(Exception e){
+            performanceSession=false;
+            getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("performanceSession",false).apply();
+            setState("● PERFORMANCE START FAILED","Android اجازه اجرای سرویس عملکرد را نداد.",false);
+        }
+    }
+
+    void stopPerformanceSession(){
+        try{stopService(new Intent(this,PerformanceSessionService.class));}catch(Exception ignored){}
+        performanceSession=false;
+        getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("performanceSession",false).apply();
+        setState("● GAME PERFORMANCE OFF","Session عملکرد متوقف شد و تنظیمات ذخیره‌شده بازگردانده می‌شوند.",true);
     }
 
     void requestBatteryOptimizationExemption(){
