@@ -42,6 +42,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends Activity {
+    static volatile MainActivity instance;
     final int BG=Color.rgb(6,12,17);
     final int CARD=Color.rgb(13,23,30);
     final int CARD2=Color.rgb(17,31,39);
@@ -123,11 +124,45 @@ public class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle b){
         super.onCreate(b);
+        instance=this;
+        loadCorePreferences();
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
         requestBestRefresh();
         buildHome();
         startTelemetry();
+    }
+
+    void loadCorePreferences(){
+        android.content.SharedPreferences p=getSharedPreferences("t3r0za",MODE_PRIVATE);
+        autoPerformance=p.getBoolean("autoPerformance",autoPerformance);
+        liveInput=p.getBoolean("liveInput",liveInput);
+        stableDns=p.getBoolean("stableDns",stableDns);
+        thermalGuard=p.getBoolean("thermalGuard",thermalGuard);
+    }
+
+    static void applyMiniSwitch(String key,boolean value){
+        MainActivity a=instance;
+        if(a!=null) a.applyMiniSwitchInternal(key,value);
+    }
+
+    void applyMiniSwitchInternal(String key,boolean value){
+        getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean(key,value).apply();
+        if("autoPerformance".equals(key)){
+            autoPerformance=value;
+            if(value){
+                getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                requestBestRefresh();
+            }else{
+                getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            }
+        }else if("liveInput".equals(key)){
+            liveInput=value;
+        }else if("stableDns".equals(key)){
+            stableDns=value;
+        }else if("thermalGuard".equals(key)){
+            thermalGuard=value;
+        }
     }
 
     void requestBestRefresh(){
@@ -247,6 +282,7 @@ public class MainActivity extends Activity {
 
         addSwitchRow(cc,"AUTO PERFORMANCE SESSION","پایش و درخواست نرخ نوسازی مناسب؛ بدون تغییر فایل یا حافظه بازی.",autoPerformance,v->{
             autoPerformance=v;
+            getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("autoPerformance",v).apply();
             if(v){
                 getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 requestBestRefresh();
@@ -259,6 +295,7 @@ public class MainActivity extends Activity {
 
         addSwitchRow(cc,"LIVE INPUT MONITOR","اندازه‌گیری Touch event، jitter و touch-to-next-frame در پنل.",liveInput,v->{
             liveInput=v;
+            getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("liveInput",v).apply();
             setState(v?"● INPUT MONITOR ON":"● INPUT MONITOR OFF",v?"اندازه‌گیری ورودی فعال شد.":"اندازه‌گیری ورودی غیرفعال شد.",true);
         });
 
@@ -269,11 +306,13 @@ public class MainActivity extends Activity {
 
         addSwitchRow(cc,"STABLE DNS SESSION","DNS فقط در صورت تأیید کاربر و برای Session مشخص؛ بدون تعویض مداوم.",stableDns,v->{
             stableDns=v;
+            getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("stableDns",v).apply();
             setState(v?"● DNS SESSION ARMED":"● DNS SESSION OFF",v?"برای Session بعدی DNS پایدار فعال است.":"DNS VPN خودکار غیرفعال شد.",true);
         });
 
         addSwitchRow(cc,"THERMAL GUARD","در فشار حرارتی بالا هشدار می‌دهد و از ادعای Boost غیرواقعی جلوگیری می‌کند.",thermalGuard,v->{
             thermalGuard=v;
+            getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("thermalGuard",v).apply();
             setState(v?"● THERMAL GUARD ON":"● THERMAL GUARD OFF",v?"محافظ حرارتی فعال است.":"محافظ حرارتی غیرفعال شد.",true);
         });
 
@@ -821,6 +860,7 @@ public class MainActivity extends Activity {
 
     @Override protected void onResume(){
         super.onResume();
+        loadCorePreferences();
         requestBestRefresh();
         if(miniPanel && Settings.canDrawOverlays(this)) startMiniPanelIfAllowed();
         if(root!=null && !runningLab) startTelemetry();
@@ -833,6 +873,7 @@ public class MainActivity extends Activity {
 
     @Override protected void onDestroy(){
         stopTelemetry();
+        if(instance==this) instance=null;
         super.onDestroy();
     }
 
