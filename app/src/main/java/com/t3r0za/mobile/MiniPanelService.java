@@ -136,7 +136,7 @@ public class MiniPanelService extends Service {
 
         addMiniSwitch(box,"AUTO PERFORMANCE", "autoPerformance", true, state);
         addMiniSwitch(box,"LIVE INPUT", "liveInput", false, state);
-        addMiniSwitch(box,"STABLE DNS", "stableDns", true, state);
+        addMiniSwitch(box,"STABLE DNS", "stableDns", false, state);
         addMiniSwitch(box,"THERMAL GUARD", "thermalGuard", true, state);
 
         TextView guardLabel=miniText("DNS GUARD  3 FAIL");
