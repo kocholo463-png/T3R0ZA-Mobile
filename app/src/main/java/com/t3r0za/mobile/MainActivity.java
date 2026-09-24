@@ -145,6 +145,31 @@ public class MainActivity extends Activity {
         miniPanel=p.getBoolean("miniPanel",true);
     }
 
+    static void quickBoostFromMini(){
+        MainActivity a=instance;
+        if(a!=null) a.safeGameBoost();
+    }
+
+    static void noDnsFromMini(){
+        MainActivity a=instance;
+        if(a!=null) a.enableNoDnsMatchMode();
+    }
+
+    static void refreshFromMini(){
+        MainActivity a=instance;
+        if(a!=null) a.requestBestRefreshAndReport();
+    }
+
+    static void touchLabFromMini(){
+        MainActivity a=instance;
+        if(a!=null) a.runTouchLabFromMini();
+    }
+
+    void runTouchLabFromMini(){
+        if(runningLab) return;
+        showTouchResponseLab();
+    }
+
     static void applyMiniSwitch(String key,boolean value){
         MainActivity a=instance;
         if(a!=null) a.applyMiniSwitchInternal(key,value);
