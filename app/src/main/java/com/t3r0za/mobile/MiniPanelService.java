@@ -107,7 +107,7 @@ public class MiniPanelService extends Service {
         p.x=8;
         p.y=120;
 
-        box.setOnTouchListener(new View.OnTouchListener(){
+        title.setOnTouchListener(new View.OnTouchListener(){
             float downX,downY;
             int startX,startY;
             public boolean onTouch(View v,MotionEvent e){
@@ -124,7 +124,7 @@ public class MiniPanelService extends Service {
                     try{wm.updateViewLayout(box,p);}catch(Exception ignored){}
                     return true;
                 }
-                return false;
+                return true;
             }
         });
 
