@@ -132,6 +132,7 @@ public class MainActivity extends Activity {
         requestBestRefresh();
         buildHome();
         startTelemetry();
+        ensureMiniPanelOnStartup();
     }
 
     void loadCorePreferences(){
@@ -141,7 +142,7 @@ public class MainActivity extends Activity {
         stableDns=p.getBoolean("stableDns",stableDns);
         thermalGuard=p.getBoolean("thermalGuard",thermalGuard);
         performanceSession=p.getBoolean("performanceSession",performanceSession);
-        miniPanel=p.getBoolean("miniPanel",miniPanel);
+        miniPanel=p.getBoolean("miniPanel",true);
     }
 
     static void applyMiniSwitch(String key,boolean value){
@@ -209,22 +210,22 @@ public class MainActivity extends Activity {
         hero.addView(detail,lp(4,0));
         root.addView(hero);
 
-        root.addView(section("LIVE DEVICE TELEMETRY"),lp(10,6));
+        root.addView(section("LIVE DEVICE TELEMETRY\nنمایش زنده وضعیت گوشی"),lp(10,6));
         LinearLayout mc=card();
         metrics=tv("",12);
         metrics.setTextColor(TEXT);
         mc.addView(metrics);
         root.addView(mc,lp(0,8));
 
-        root.addView(section("HEADSHOT LAB"),lp(10,6));
+        root.addView(section("HEADSHOT LAB\nآزمایش کالیبراسیون نشانه‌گیری دستی"),lp(10,6));
         LinearLayout hc=card();
-        TextView ht=tv("Manual Aim Calibration",18);
+        TextView ht=tv("Manual Aim Calibration\nکالیبراسیون دستی نشانه‌گیری",18);
         ht.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         hc.addView(ht);
         TextView hd=tv("این بخش مسیر واقعی لمس خودت را اندازه می‌گیرد و برای کم‌کردن رد شدن از سر، overshoot و undershoot را تحلیل می‌کند.",10);
         hd.setTextColor(MUTED);
         hc.addView(hd,lp(3,10));
-        Button lab=btn("🎯 START HEADSHOT CALIBRATION");
+        Button lab=btn("🎯 START HEADSHOT CALIBRATION\nشروع کالیبراسیون نشانه‌گیری");
         lab.setTextSize(15);
         lab.setTextColor(ACCENT);
         lab.setBackground(bg(Color.rgb(12,48,42),18));
@@ -232,28 +233,28 @@ public class MainActivity extends Activity {
         hc.addView(lab,lp(0,8));
         root.addView(hc);
 
-        root.addView(section("DNS STABILITY LAB"),lp(10,6));
+        root.addView(section("DNS STABILITY LAB\nآزمایش پایداری DNS"),lp(10,6));
         LinearLayout dc=card();
-        TextView dt=tv("Resolver Benchmark + Fallback",18);
+        TextView dt=tv("Resolver Benchmark + Fallback\nآزمون Resolver و جایگزین پایدار",18);
         dt.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         dc.addView(dt);
         TextView dd=tv("چند resolver واقعی را از مسیر فعلی شبکه تست می‌کند و latency، packet loss و پایداری را مقایسه می‌کند. برنامه هنگام بازی DNS را مدام عوض نمی‌کند تا باعث reconnect و timeout نشود.",10);
         dd.setTextColor(MUTED);
         dc.addView(dd,lp(3,10));
-        Button db=btn("🌐 RUN DNS STABILITY TEST");
+        Button db=btn("🌐 RUN DNS STABILITY TEST\nاجرای تست پایداری DNS");
         db.setTextColor(ACCENT);
         db.setOnClickListener(v->runDnsBenchmark());
         dc.addView(db,lp(0,8));
         root.addView(dc);
 
-        root.addView(section("PERFORMANCE CONTROL"),lp(10,6));
+        root.addView(section("PERFORMANCE CONTROL\nکنترل عملکرد"),lp(10,6));
         LinearLayout pc=card();
 
-        Button ready=btn("⚡ GAME READY CHECK");
+        Button ready=btn("⚡ GAME READY CHECK\nبررسی آماده‌بودن بازی");
         ready.setOnClickListener(v->gameReady());
         pc.addView(ready);
 
-        Button max=btn("⟳ REQUEST MAX DISPLAY REFRESH");
+        Button max=btn("⟳ REQUEST MAX DISPLAY REFRESH\nدرخواست بیشترین نرخ نوسازی نمایشگر");
         max.setOnClickListener(v->{
             requestBestRefresh();
             updateTelemetry();
@@ -261,39 +262,35 @@ public class MainActivity extends Activity {
         });
         pc.addView(max,lp(0,8));
 
-        Button scan=btn("🔎 FULL PERFORMANCE SCAN");
+        Button scan=btn("🔎 FULL PERFORMANCE SCAN\nاسکن کامل عملکرد");
         scan.setOnClickListener(v->fullPerformanceScan());
         pc.addView(scan,lp(0,8));
 
-        Button launch=btn("▶ LAUNCH FREE FIRE + AUTO DNS SESSION");
+        Button launch=btn("▶ LAUNCH FREE FIRE + AUTO DNS SESSION\nاجرای Free Fire با نشست DNS خودکار");
         launch.setOnClickListener(v->{ if(stableDns) launchWithBestDns(); else launchFF(); });
         pc.addView(launch,lp(0,8));
-        Button perf=btn("⚡ START GAME PERFORMANCE SESSION");
+        Button perf=btn("⚡ START GAME PERFORMANCE SESSION\nشروع نشست عملکرد بازی");
         perf.setOnClickListener(v->startPerformanceSession());
         pc.addView(perf,lp(0,8));
 
-        Button stopDns=btn("■ STOP DNS SESSION");
+        Button stopDns=btn("■ STOP DNS SESSION\nتوقف نشست DNS");
         stopDns.setOnClickListener(v->stopDnsSession());
         pc.addView(stopDns,lp(0,8));
 
-        Button mini=btn("🎮 ENABLE MINI IN-GAME PANEL");
+        Button mini=btn("🎮 ENABLE MINI IN-GAME PANEL\nفعال‌سازی پنل کوچک داخل بازی");
         mini.setOnClickListener(v->toggleMiniPanel());
         pc.addView(mini,lp(0,8));
 
-        Button usage=btn("⚙ ENABLE AUTO-STOP PERMISSION");
+        Button usage=btn("⚙ USAGE ACCESS\nدسترسی آمار استفاده");
         usage.setOnClickListener(v->openUsageAccess());
         pc.addView(usage,lp(0,8));
 
-        Button battery=btn("🔋 REQUEST BATTERY OPTIMIZATION EXEMPTION");
-        battery.setOnClickListener(v->requestBatteryOptimizationExemption());
-        pc.addView(battery,lp(0,8));
-
         root.addView(pc);
 
-        root.addView(section("T3R0ZA CONTROL CORE"),lp(10,6));
+        root.addView(section("T3R0ZA CONTROL CORE\nهسته کنترل T3R0ZA"),lp(10,6));
         LinearLayout cc=card();
 
-        addSwitchRow(cc,"AUTO PERFORMANCE SESSION","پایش و درخواست نرخ نوسازی مناسب؛ بدون تغییر فایل یا حافظه بازی.",autoPerformance,(buttonView,isChecked)->{
+        addSwitchRow(cc,"AUTO PERFORMANCE SESSION\nنشست خودکار عملکرد","پایش و درخواست نرخ نوسازی مناسب؛ بدون تغییر فایل یا حافظه بازی.",autoPerformance,(buttonView,isChecked)->{
             autoPerformance=isChecked;
             getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("autoPerformance",isChecked).apply();
             if(isChecked){
@@ -306,7 +303,7 @@ public class MainActivity extends Activity {
             }
         });
 
-        addSwitchRow(cc,"GAME PERFORMANCE SESSION","نرخ نوسازی دستگاه را فقط هنگام اجرای Free Fire و با مجوز سیستم مدیریت می‌کند.",performanceSession,(buttonView,isChecked)->{
+        addSwitchRow(cc,"GAME PERFORMANCE SESSION\nنشست عملکرد بازی","نرخ نوسازی دستگاه را فقط هنگام اجرای Free Fire و با مجوز سیستم مدیریت می‌کند.",performanceSession,(buttonView,isChecked)->{
             performanceSession=isChecked;
             getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("performanceSession",isChecked).apply();
             if(isChecked){
@@ -316,13 +313,13 @@ public class MainActivity extends Activity {
             }
         });
 
-        addSwitchRow(cc,"LIVE INPUT MONITOR","اندازه‌گیری Touch event، jitter و touch-to-next-frame در پنل.",liveInput,(buttonView,isChecked)->{
+        addSwitchRow(cc,"LIVE INPUT MONITOR\nپایش زنده لمس","اندازه‌گیری Touch event، jitter و touch-to-next-frame در پنل.",liveInput,(buttonView,isChecked)->{
             liveInput=isChecked;
             getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("liveInput",isChecked).apply();
             setState(isChecked?"● INPUT MONITOR ON":"● INPUT MONITOR OFF",isChecked?"اندازه‌گیری ورودی فعال شد.":"اندازه‌گیری ورودی غیرفعال شد.",true);
         });
 
-        addSwitchRow(cc,"MINI IN-GAME PANEL","پنل کوچک روی بازی؛ فقط کنترل‌های واقعی T3R0ZA مثل DNS، مانیتور و بازگشت به پنل.",miniPanel,(buttonView,isChecked)->{
+        addSwitchRow(cc,"MINI IN-GAME PANEL\nپنل کوچک داخل بازی","پنل کوچک روی بازی؛ فقط کنترل‌های واقعی T3R0ZA مثل DNS، مانیتور و بازگشت به پنل.",miniPanel,(buttonView,isChecked)->{
             miniPanel=isChecked;
             getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("miniPanel",isChecked).apply();
             if(isChecked){
@@ -343,23 +340,23 @@ public class MainActivity extends Activity {
             }
         });
 
-        addSwitchRow(cc,"STABLE DNS SESSION","DNS فقط در صورت تأیید کاربر و برای Session مشخص؛ بدون تعویض مداوم.",stableDns,(buttonView,isChecked)->{
+        addSwitchRow(cc,"STABLE DNS SESSION\nنشست DNS پایدار","DNS فقط در صورت تأیید کاربر و برای Session مشخص؛ بدون تعویض مداوم.",stableDns,(buttonView,isChecked)->{
             stableDns=isChecked;
             getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("stableDns",isChecked).apply();
             setState(isChecked?"● DNS SESSION ARMED":"● DNS SESSION OFF",isChecked?"برای Session بعدی DNS پایدار فعال است.":"DNS VPN خودکار غیرفعال شد.",true);
         });
 
-        addSwitchRow(cc,"THERMAL GUARD","در فشار حرارتی بالا هشدار می‌دهد و از ادعای Boost غیرواقعی جلوگیری می‌کند.",thermalGuard,(buttonView,isChecked)->{
+        addSwitchRow(cc,"THERMAL GUARD\nمحافظ حرارتی","در فشار حرارتی بالا هشدار می‌دهد و از ادعای Boost غیرواقعی جلوگیری می‌کند.",thermalGuard,(buttonView,isChecked)->{
             thermalGuard=isChecked;
             getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("thermalGuard",isChecked).apply();
             setState(isChecked?"● THERMAL GUARD ON":"● THERMAL GUARD OFF",isChecked?"محافظ حرارتی فعال است.":"محافظ حرارتی غیرفعال شد.",true);
         });
 
-        addSliderRow(cc,"MONITORING DEPTH","سبک", "عمیق", telemetryIntervalMs, 500, 3000, value->{
+        addSliderRow(cc,"MONITORING DEPTH\nعمق پایش","سبک", "عمیق", telemetryIntervalMs, 500, 3000, value->{
             telemetryIntervalMs=value;
         });
 
-        addSliderRow(cc,"DISPLAY REQUEST","سیستم", "بالاترین", 100, 0, 100, value->{
+        addSliderRow(cc,"DISPLAY REQUEST\nدرخواست نرخ نوسازی","سیستم", "بالاترین", 100, 0, 100, value->{
             if(value>=70) requestBestRefresh();
         });
 
@@ -909,6 +906,15 @@ public class MainActivity extends Activity {
         }catch(Exception ignored){}
     }
 
+    void ensureMiniPanelOnStartup(){
+        if(!miniPanel) return;
+        if(Settings.canDrawOverlays(this)){
+            startMiniPanelIfAllowed();
+        }else if(status!=null){
+            setState("● MINI PANEL READY\nپنل کوچک آماده است","برای نمایش روی Free Fire فقط مجوز «نمایش روی برنامه‌های دیگر» لازم است؛ هیچ دسترسی سیستمی دیگری خودکار فعال نمی‌شود.",true);
+        }
+    }
+
     void stopMiniPanel(){
         miniPanel=false;
         getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean("miniPanel",false).apply();
@@ -1016,7 +1022,7 @@ public class MainActivity extends Activity {
         super.onResume();
         loadCorePreferences();
         requestBestRefresh();
-        if(miniPanel && Settings.canDrawOverlays(this)) startMiniPanelIfAllowed();
+        if(miniPanel) ensureMiniPanelOnStartup();
         if(root!=null && !runningLab) startTelemetry();
     }
 
@@ -1052,7 +1058,7 @@ public class MainActivity extends Activity {
 
         page.addView(hv,new LinearLayout.LayoutParams(-1,0,1));
 
-        Button back=btn("← BACK TO PANEL");
+        Button back=btn("← BACK TO PANEL\nبازگشت به پنل");
         back.setOnClickListener(v->{runningLab=false;buildHome();startTelemetry();});
         page.addView(back,lp(0,8));
         setContentView(page);
