@@ -206,6 +206,9 @@ public class DnsTunnelService extends VpnService {
 
             byte[] answer=Arrays.copyOf(r.getData(),r.getLength());
             if(answer.length<12) return null;
+            if(dnsPayload.length<2) return null;
+            if(answer[0]!=dnsPayload[0] || answer[1]!=dnsPayload[1]) return null;
+            if((answer[2]&0x80)==0) return null;
 
             long latency=(System.nanoTime()-start)/1000000L;
             lastDnsLatencyMs=latency;
@@ -288,7 +291,7 @@ public class DnsTunnelService extends VpnService {
             DatagramPacket response=new DatagramPacket(buf,buf.length);
             probe.receive(response);
 
-            if(response.getLength()<12){
+            if(response.getLength()<12 || (response.getData()[2]&0x80)==0){
                 healthFailure("DNS response invalid");
                 return;
             }
