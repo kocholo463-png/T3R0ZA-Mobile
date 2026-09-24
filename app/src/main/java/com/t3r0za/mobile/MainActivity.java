@@ -27,6 +27,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 
 public class MainActivity extends Activity {
     final int BG=Color.rgb(6,12,17);
@@ -170,6 +173,23 @@ public class MainActivity extends Activity {
         hc.addView(lab,lp(0,8));
         root.addView(hc);
 
+        root.addView(section("DNS STABILITY LAB"),lp(10,6));
+        LinearLayout dc=card();
+        TextView dt=tv("Resolver Benchmark + Fallback",18);
+        dt.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        dc.addView(dt);
+        TextView dd=tv("چند resolver واقعی را از مسیر فعلی شبکه تست می‌کند و latency، packet loss و پایداری را مقایسه می‌کند. برنامه هنگام بازی DNS را مدام عوض نمی‌کند تا باعث reconnect و timeout نشود.",10);
+        dd.setTextColor(MUTED);
+        dc.addView(dd,lp(3,10));
+        Button db=btn("🌐 RUN DNS STABILITY TEST");
+        db.setTextColor(ACCENT);
+        db.setOnClickListener(v->runDnsBenchmark());
+        dc.addView(db,lp(0,8));
+        Button ps=btn("⚙ OPEN PRIVATE DNS SETTINGS");
+        ps.setOnClickListener(v->openPrivateDnsSettings());
+        dc.addView(ps,lp(0,8));
+        root.addView(dc);
+
         root.addView(section("PERFORMANCE CONTROL"),lp(10,6));
         LinearLayout pc=card();
 
@@ -287,6 +307,109 @@ public class MainActivity extends Activity {
             setState("● GAME READY","رفرش و وضعیت حرارتی برای شروع تست مناسب‌تر است.",true);
         }else{
             setState("● GAME READY: WATCH","قبل از تست هدشات، ابتدا فشار حرارتی را پایین بیاور.",false);
+        }
+    }
+
+    static final String[] DNS_SERVERS={
+        "1.1.1.1","1.0.0.1","8.8.8.8","8.8.4.4","9.9.9.9","149.112.112.112",
+        "208.67.222.222","208.67.220.220","94.140.14.14","94.140.15.15",
+        "76.76.2.0","76.76.10.0","185.228.168.9","185.228.169.9",
+        "1.1.1.2","1.0.0.2","9.9.9.10","149.112.112.10","208.67.222.123","208.67.220.123"
+    };
+
+    void runDnsBenchmark(){
+        setState("● DNS TEST RUNNING","در حال اندازه‌گیری resolverهای واقعی روی شبکه فعلی...",true);
+        new Thread(()->{
+            ArrayList<String> good=new ArrayList<>();
+            ArrayList<Long> times=new ArrayList<>();
+            for(String server:DNS_SERVERS){
+                long sum=0;
+                int ok=0;
+                for(int i=0;i<2;i++){
+                    long ms=dnsProbe(server,"example.com",1200);
+                    if(ms>=0){sum+=ms;ok++;}
+                }
+                if(ok>0){
+                    long avg=sum/ok;
+                    good.add(server+"  "+avg+" ms  "+ok+"/2");
+                    times.add(avg);
+                }
+            }
+            Collections.sort(good,(a,b)->Long.compare(extractMs(a),extractMs(b)));
+            StringBuilder out=new StringBuilder();
+            if(good.isEmpty()){
+                out.append("هیچ resolverی از این شبکه پاسخ قابل‌اعتماد نداد. DNS را عوض نکن؛ ابتدا خود اتصال را بررسی کن.");
+            }else{
+                out.append("TOP STABLE RESOLVERS\\n");
+                int n=Math.min(6,good.size());
+                for(int i=0;i<n;i++) out.append(i+1).append(". ").append(good.get(i)).append("\\n");
+                out.append("\\nاین عدد latency خود DNS lookup است، نه پینگ داخل مچ Free Fire.\\n");
+                out.append("برای جلوگیری از timeout، resolver انتخابی را وسط بازی تعویض نکن.");
+            }
+            final String result=out.toString();
+            handler.post(()->{
+                new AlertDialog.Builder(MainActivity.this).setTitle("DNS STABILITY RESULT").setMessage(result).setPositiveButton("OK",null).show();
+                setState("● DNS TEST COMPLETE","فهرست بر اساس پاسخ واقعی شبکه مرتب شد.",true);
+            });
+        }).start();
+    }
+
+    long extractMs(String s){
+        try{
+            int p=s.lastIndexOf(" ms");
+            int q=s.lastIndexOf(" ",p-1);
+            return Long.parseLong(s.substring(q+1,p));
+        }catch(Exception e){return Long.MAX_VALUE;}
+    }
+
+    long dnsProbe(String server,String host,int timeoutMs){
+        DatagramSocket socket=null;
+        try{
+            byte[] query=buildDnsQuery(host);
+            InetAddress address=InetAddress.getByName(server);
+            socket=new DatagramSocket();
+            socket.setSoTimeout(timeoutMs);
+            DatagramPacket packet=new DatagramPacket(query,query.length,address,53);
+            long start=System.nanoTime();
+            socket.send(packet);
+            byte[] buf=new byte[1500];
+            DatagramPacket resp=new DatagramPacket(buf,buf.length);
+            socket.receive(resp);
+            long end=System.nanoTime();
+            if(resp.getLength()<12) return -1;
+            return Math.max(0,(end-start)/1000000L);
+        }catch(Exception e){return -1;}
+        finally{if(socket!=null) socket.close();}
+    }
+
+    byte[] buildDnsQuery(String host){
+        String[] labels=host.split("\\\\.");
+        byte[] b=new byte[512];
+        int p=0;
+        int id=(int)(System.nanoTime()&0xffff);
+        b[p++]=(byte)((id>>8)&255); b[p++]=(byte)(id&255);
+        b[p++]=1; b[p++]=0;
+        b[p++]=0; b[p++]=1;
+        b[p++]=0; b[p++]=0; b[p++]=0; b[p++]=0; b[p++]=0; b[p++]=0;
+        for(String label:labels){
+            byte[] x=label.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+            b[p++]=(byte)x.length;
+            System.arraycopy(x,0,b,p,x.length); p+=x.length;
+        }
+        b[p++]=0;
+        b[p++]=0; b[p++]=1;
+        b[p++]=0; b[p++]=1;
+        byte[] q=new byte[p];
+        System.arraycopy(b,0,q,0,p);
+        return q;
+    }
+
+    void openPrivateDnsSettings(){
+        try{
+            if(Build.VERSION.SDK_INT>=28) startActivity(new Intent(Settings.ACTION_PRIVATE_DNS_SETTINGS));
+            else startActivity(new Intent(Settings.ACTION_WIRELESS_SETTINGS));
+        }catch(Exception e){
+            try{startActivity(new Intent(Settings.ACTION_SETTINGS));}catch(Exception ignored){}
         }
     }
 
