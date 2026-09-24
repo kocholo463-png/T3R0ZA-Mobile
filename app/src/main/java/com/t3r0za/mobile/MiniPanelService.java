@@ -31,7 +31,9 @@ public class MiniPanelService extends Service {
     static final int DEFAULT_DNS_FAIL_LIMIT=3;
     WindowManager wm;
     View panel;
+    View hiddenBubble;
     boolean attached=false;
+    boolean hidden=false;
     boolean dnsOn=false;
     Handler handler=new Handler();
     Runnable stateTicker;
@@ -119,6 +121,10 @@ public class MiniPanelService extends Service {
         Button panelBtn=smallButton("PANEL");
         panelBtn.setOnClickListener(v->openPanel());
         top.addView(panelBtn,new LinearLayout.LayoutParams(dp(62),dp(34)));
+
+        Button hide=smallButton("HIDE");
+        hide.setOnClickListener(v->hidePanel());
+        top.addView(hide,new LinearLayout.LayoutParams(dp(58),dp(34)));
 
         Button stop=smallButton("×");
         stop.setOnClickListener(v->stopSelf());
@@ -323,13 +329,63 @@ public class MiniPanelService extends Service {
         startActivity(i);
     }
 
-    @Override public void onDestroy(){
+    void hidePanel(){
+        if(hidden) return;
+        hidden=true;
         if(stateTicker!=null) handler.removeCallbacks(stateTicker);
         if(wm!=null && panel!=null && attached){
             try{wm.removeView(panel);}catch(Exception ignored){}
         }
         attached=false;
+        TextView bubble=new TextView(this);
+        bubble.setText("T3");
+        bubble.setGravity(Gravity.CENTER);
+        bubble.setTextColor(Color.rgb(39,215,165));
+        bubble.setTextSize(11);
+        bubble.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        bubble.setBackground(buttonBackground());
+        bubble.setOnClickListener(v->{
+            if(wm!=null && hiddenBubble!=null){
+                try{wm.removeView(hiddenBubble);}catch(Exception ignored){}
+            }
+            hiddenBubble=null;
+            hidden=false;
+            showPanel();
+        });
+        hiddenBubble=bubble;
+
+        int type=Build.VERSION.SDK_INT>=26
+            ?WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            :WindowManager.LayoutParams.TYPE_PHONE;
+        WindowManager.LayoutParams p=new WindowManager.LayoutParams(
+            dp(52),dp(52),type,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                |WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT);
+        p.gravity=Gravity.TOP|Gravity.END;
+        p.x=dp(8);
+        p.y=dp(90);
+        try{
+            wm.addView(hiddenBubble,p);
+        }catch(Exception e){
+            hiddenBubble=null;
+            hidden=false;
+            stopSelf();
+        }
+    }
+
+    @Override public void onDestroy(){
+        if(stateTicker!=null) handler.removeCallbacks(stateTicker);
+        if(wm!=null && panel!=null && attached){
+            try{wm.removeView(panel);}catch(Exception ignored){}
+        }
+        if(wm!=null && hiddenBubble!=null){
+            try{wm.removeView(hiddenBubble);}catch(Exception ignored){}
+        }
+        attached=false;
         panel=null;
+        hiddenBubble=null;
+        hidden=false;
         super.onDestroy();
     }
 
