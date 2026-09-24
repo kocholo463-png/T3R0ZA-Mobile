@@ -1,0 +1,25 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "com.t3r0za.mobile"
+    compileSdk 37
+
+    defaultConfig {
+        applicationId "com.t3r0za.mobile"
+        minSdk 26
+        targetSdk 37
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+        release {
+            minifyEnabled false
+        }
+    }
+}
