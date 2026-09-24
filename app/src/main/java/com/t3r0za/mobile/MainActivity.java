@@ -895,6 +895,18 @@ public class MainActivity extends Activity {
         try{stopService(new Intent(this,MiniPanelService.class));}catch(Exception ignored){}
     }
 
+    boolean hasUsageAccess(){
+        if(Build.VERSION.SDK_INT<21) return false;
+        try{
+            AppOpsManager appOps=(AppOpsManager)getSystemService(APP_OPS_SERVICE);
+            if(appOps==null) return false;
+            int mode=appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS,android.os.Process.myUid(),getPackageName());
+            return mode==AppOpsManager.MODE_ALLOWED;
+        }catch(Exception e){
+            return false;
+        }
+    }
+
     void openUsageAccess(){
         try{
             startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS));
