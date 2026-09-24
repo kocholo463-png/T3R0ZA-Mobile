@@ -732,6 +732,7 @@ public class MainActivity extends Activity {
     @Override protected void onResume(){
         super.onResume();
         requestBestRefresh();
+        if(miniPanel && Settings.canDrawOverlays(this)) startMiniPanelIfAllowed();
         if(root!=null && !runningLab) startTelemetry();
     }
 
