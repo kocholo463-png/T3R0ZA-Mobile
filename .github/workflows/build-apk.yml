@@ -23,10 +23,12 @@ jobs:
       - name: Install Android SDK packages
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Set up Gradle 9.6.1
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          gradle-version: '9.6.1'
+      - name: Install Gradle 9.6.1
+        run: |
+          wget -q https://services.gradle.org/distributions/gradle-9.6.1-bin.zip -O "$RUNNER_TEMP/gradle.zip"
+          unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP/gradle"
+          echo "$RUNNER_TEMP/gradle/gradle-9.6.1/bin" >> "$GITHUB_PATH"
+          gradle --version
 
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
