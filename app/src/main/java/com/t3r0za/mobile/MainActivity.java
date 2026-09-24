@@ -100,7 +100,7 @@ public class MainActivity extends Activity {
         root.addView(section("CONTROL"),lp(4,6));
 
         LinearLayout row=toggleRow("LIVE MONITOR","اندازه‌گیری لحظه‌ای وضعیت دستگاه",true);
-        monitorSwitch=(Switch)row.getChildAt(1);
+        monitorSwitch=(Switch)((LinearLayout)row.getChildAt(0)).getChildAt(1);
         monitorSwitch.setOnCheckedChangeListener((v,checked)->{
             if(checked){
                 startMonitor();
@@ -113,7 +113,7 @@ public class MainActivity extends Activity {
         root.addView(row,lp(0,8));
 
         row=toggleRow("KEEP SCREEN AWAKE","تا وقتی T3R0ZA باز است صفحه خاموش نشود",false);
-        screenSwitch=(Switch)row.getChildAt(1);
+        screenSwitch=(Switch)((LinearLayout)row.getChildAt(0)).getChildAt(1);
         screenSwitch.setOnCheckedChangeListener((v,checked)->{
             if(checked){
                 getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
