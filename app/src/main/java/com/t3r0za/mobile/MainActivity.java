@@ -249,18 +249,12 @@ public class MainActivity extends Activity {
         try{ignoring=pm.isIgnoringBatteryOptimizations(getPackageName());}catch(Exception ignored){}
 
         metrics.setText(
-            "RAM       "+used+" / "+total+" MB
-"+
-            "BATTERY   "+batt+"%
-"+
-            "REFRESH   "+String.format(Locale.US,"%.0f",hz)+" Hz
-"+
-            "LAB FPS   "+(labFps>0?String.format(Locale.US,"%.1f",labFps):"--")+" FPS
-"+
-            "THERMAL   "+thermal+"
-"+
-            "POWER     "+(saver?"SAVER ON":"NORMAL")+"
-"+
+            "RAM       "+used+" / "+total+" MB\\n"+
+            "BATTERY   "+batt+"%\\n"+
+            "REFRESH   "+String.format(Locale.US,"%.0f",hz)+" Hz\\n"+
+            "LAB FPS   "+(labFps>0?String.format(Locale.US,"%.1f",labFps):"--")+" FPS\\n"+
+            "THERMAL   "+thermal+"\\n"+
+            "POWER     "+(saver?"SAVER ON":"NORMAL")+"\\n"+
             "BATTERY OPT  "+(ignoring?"BYPASS ACTIVE":"SYSTEM MANAGED")
         );
 
