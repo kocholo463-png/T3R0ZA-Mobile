@@ -191,9 +191,6 @@ public class MainActivity extends Activity {
         db.setTextColor(ACCENT);
         db.setOnClickListener(v->runDnsBenchmark());
         dc.addView(db,lp(0,8));
-        Button ps=btn("⚙ OPEN PRIVATE DNS SETTINGS");
-        ps.setOnClickListener(v->openPrivateDnsSettings());
-        dc.addView(ps,lp(0,8));
         root.addView(dc);
 
         root.addView(section("PERFORMANCE CONTROL"),lp(10,6));
@@ -211,9 +208,9 @@ public class MainActivity extends Activity {
         });
         pc.addView(max,lp(0,8));
 
-        Button batt=btn("🔋 BATTERY OPTIMIZATION SETTINGS");
-        batt.setOnClickListener(v->batteryOptimization());
-        pc.addView(batt,lp(0,8));
+        Button scan=btn("🔎 FULL PERFORMANCE SCAN");
+        scan.setOnClickListener(v->fullPerformanceScan());
+        pc.addView(scan,lp(0,8));
 
         Button launch=btn("▶ LAUNCH FREE FIRE + AUTO DNS SESSION");
         launch.setOnClickListener(v->launchWithBestDns());
@@ -226,10 +223,6 @@ public class MainActivity extends Activity {
         Button usage=btn("⚙ ENABLE AUTO-STOP PERMISSION");
         usage.setOnClickListener(v->openUsageAccess());
         pc.addView(usage,lp(0,8));
-
-        Button thermal=btn("🌡 THERMAL DETAIL");
-        thermal.setOnClickListener(v->thermalInfo());
-        pc.addView(thermal,lp(0,8));
 
         root.addView(pc);
 
@@ -310,6 +303,96 @@ public class MainActivity extends Activity {
         if(s==PowerManager.THERMAL_STATUS_SEVERE) return "SEVERE";
         if(s==PowerManager.THERMAL_STATUS_CRITICAL) return "CRITICAL";
         return "EMERGENCY";
+    }
+
+    void fullPerformanceScan(){
+        setState("● FULL SCAN RUNNING","در حال بررسی وضعیت واقعی دستگاه و بسته Free Fire...",true);
+        new Thread(()->{
+            String gamePackage=findFreeFirePackage();
+            String gameState=gamePackage==null?"NOT INSTALLED":"INSTALLED: "+gamePackage;
+            String gameVersion="--";
+            String targetSdk="--";
+            if(gamePackage!=null){
+                try{
+                    android.content.pm.PackageInfo pi=getPackageManager().getPackageInfo(gamePackage,0);
+                    gameVersion=pi.versionName==null?"--":pi.versionName;
+                    targetSdk=String.valueOf(pi.applicationInfo.targetSdkVersion);
+                }catch(Exception ignored){}
+            }
+
+            ActivityManager am=(ActivityManager)getSystemService(ACTIVITY_SERVICE);
+            ActivityManager.MemoryInfo mi=new ActivityManager.MemoryInfo();
+            am.getMemoryInfo(mi);
+            long total=mi.totalMem/1048576L;
+            long avail=mi.availMem/1048576L;
+            long used=total-avail;
+
+            PowerManager pm=(PowerManager)getSystemService(POWER_SERVICE);
+            String thermal=thermalName(pm);
+            boolean saver=pm.isPowerSaveMode();
+            float hz=getWindowManager().getDefaultDisplay().getRefreshRate();
+
+            String batteryOpt="UNKNOWN";
+            try{
+                batteryOpt=pm.isIgnoringBatteryOptimizations(getPackageName())?"IGNORED":"SYSTEM";
+            }catch(Exception ignored){}
+
+            String result=
+                "FREE FIRE\n"+
+                "Package: "+gameState+"\n"+
+                "Version: "+gameVersion+"\n"+
+                "Target SDK: "+targetSdk+"\n\n"+
+                "DEVICE\n"+
+                "RAM free: "+avail+" MB / "+total+" MB\n"+
+                "RAM used: "+used+" MB\n"+
+                "Refresh: "+String.format(Locale.US,"%.0f",hz)+" Hz\n"+
+                "Thermal: "+thermal+"\n"+
+                "Power saver: "+(saver?"ON":"OFF")+"\n"+
+                "T3R0ZA battery policy: "+batteryOpt+"\n\n"+
+                "RESULT\n"+
+                buildScanVerdict(thermal,saver,avail,total,hz,gamePackage!=null);
+
+            handler.post(()->{
+                new AlertDialog.Builder(MainActivity.this)
+                    .setTitle("T3R0ZA PERFORMANCE SCAN")
+                    .setMessage(result)
+                    .setPositiveButton("OK",null)
+                    .show();
+                boolean good=gamePackage!=null && !saver &&
+                    (thermal.equals("NORMAL")||thermal.equals("LIGHT")) &&
+                    avail>Math.max(300,total/10);
+                setState(good?"● SCAN READY":"● SCAN FOUND LIMITS",
+                    good?"شرایط فعلی برای تست بازی مناسب‌تر است.":"یک یا چند عامل سیستمی می‌تواند پایداری عملکرد را محدود کند.",
+                    good);
+            });
+        }).start();
+    }
+
+    String findFreeFirePackage(){
+        String[] pkgs={"com.dts.freefireth","com.dts.freefiremax"};
+        for(String p:pkgs){
+            try{
+                getPackageManager().getPackageInfo(p,0);
+                return p;
+            }catch(Exception ignored){}
+        }
+        return null;
+    }
+
+    String buildScanVerdict(String thermal,boolean saver,long avail,long total,float hz,boolean installed){
+        StringBuilder s=new StringBuilder();
+        if(!installed) s.append("Free Fire روی دستگاه پیدا نشد. ");
+        if(saver) s.append("Power Saver روشن است و ممکن است عملکرد را محدود کند. ");
+        if(thermal.equals("SEVERE")||thermal.equals("CRITICAL")||thermal.equals("EMERGENCY")){
+            s.append("فشار حرارتی بالاست و حفظ FPS پایدار سخت‌تر می‌شود. ");
+        }else if(thermal.equals("MODERATE")){
+            s.append("دما متوسط است؛ پایداری را زیر بار دوباره بررسی کن. ");
+        }
+        if(avail<Math.max(300,total/10)) s.append("RAM آزاد کم است. ");
+        if(hz>0 && hz<90) s.append("نرخ نوسازی گزارش‌شده زیر 90Hz است. ");
+        if(s.length()==0) s.append("محدودیت واضحی از داده‌های قابل‌دسترسی سیستم دیده نشد. ");
+        s.append("این اسکن به فایل‌ها یا حافظه داخلی Free Fire دسترسی نمی‌گیرد و تنظیمات/فایل‌های بازی را دستکاری نمی‌کند.");
+        return s.toString();
     }
 
     void gameReady(){
@@ -424,16 +507,6 @@ public class MainActivity extends Activity {
         }catch(Exception ignored){}
     }
 
-    boolean hasUsageAccess(){
-        try{
-            AppOpsManager ops=(AppOpsManager)getSystemService(APP_OPS_SERVICE);
-            int mode;
-            if(Build.VERSION.SDK_INT>=29) mode=ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS,android.os.Process.myUid(),getPackageName());
-            else mode=ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS,android.os.Process.myUid(),getPackageName());
-            return mode==AppOpsManager.MODE_ALLOWED;
-        }catch(Exception e){return false;}
-    }
-
     void openUsageAccess(){
         try{
             startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS));
@@ -490,31 +563,6 @@ public class MainActivity extends Activity {
         byte[] q=new byte[p];
         System.arraycopy(b,0,q,0,p);
         return q;
-    }
-
-    void openPrivateDnsSettings(){
-        try{
-            if(Build.VERSION.SDK_INT>=28) startActivity(new Intent("android.settings.PRIVATE_DNS_SETTINGS"));
-            else startActivity(new Intent(Settings.ACTION_WIRELESS_SETTINGS));
-        }catch(Exception e){
-            try{startActivity(new Intent(Settings.ACTION_SETTINGS));}catch(Exception ignored){}
-        }
-    }
-
-    void batteryOptimization(){
-        try{
-            Intent i=new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-            i.setData(Uri.parse("package:"+getPackageName()));
-            startActivity(i);
-        }catch(Exception e){
-            try{startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));}catch(Exception ignored){}
-        }
-    }
-
-    void thermalInfo(){
-        PowerManager pm=(PowerManager)getSystemService(POWER_SERVICE);
-        String x=thermalName(pm);
-        setState("● THERMAL: "+x,x.equals("NORMAL")||x.equals("LIGHT")?"فشار حرارتی پایین است.":"دستگاه گرم است؛ قبل از تنظیم حساسیت دوباره تست کن.",x.equals("NORMAL")||x.equals("LIGHT"));
     }
 
     void launchFF(){
