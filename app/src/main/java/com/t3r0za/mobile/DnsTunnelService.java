@@ -24,6 +24,7 @@ import java.util.Arrays;
 
 public class DnsTunnelService extends VpnService {
     static final String EXTRA_DNS="dns";
+    static final String EXTRA_PREMATCH_ONLY="prematch_only";
     static final int NOTIF_ID=9101;
     static final String CHANNEL="t3r0za_dns";
     static final String ACTION_STOP="com.t3r0za.mobile.STOP_DNS";
@@ -33,6 +34,7 @@ public class DnsTunnelService extends VpnService {
     static final int DNS_TIMEOUT_MS=900;
     static final int DNS_HEALTH_INTERVAL_MS=5000;
     static final long DNS_IDLE_STOP_MS=15000L;
+    static final long DNS_PREMATCH_MAX_MS=90000L;
     static final long DNS_MIN_ACTIVE_MS=30000L;
     static final int MAX_CONSECUTIVE_HEALTH_FAILURES=3;
 
@@ -45,6 +47,7 @@ public class DnsTunnelService extends VpnService {
     volatile long lastDnsLatencyMs=-1;
     volatile long lastDnsPacketAtMs=0L;
     long tunnelStartedAtMs=0L;
+    boolean prematchOnly=false;
     volatile long lastHealthAtMs=0;
     String dns;
     InetAddress dnsAddress;
@@ -64,6 +67,9 @@ public class DnsTunnelService extends VpnService {
         if(intent!=null && intent.hasExtra(EXTRA_DNS)){
             String requested=intent.getStringExtra(EXTRA_DNS);
             if(!running) dns=requested;
+        }
+        if(intent!=null && intent.hasExtra(EXTRA_PREMATCH_ONLY)){
+            prematchOnly=intent.getBooleanExtra(EXTRA_PREMATCH_ONLY,false);
         }
         if(dns==null || dns.trim().isEmpty()){
             stopSelf();
@@ -262,6 +268,12 @@ public class DnsTunnelService extends VpnService {
                     runHealthCheck();
                     nextHealth=now+DNS_HEALTH_INTERVAL_MS;
                     if(!running) break;
+                }
+
+                if(prematchOnly && now-tunnelStartedAtMs>=DNS_PREMATCH_MAX_MS){
+                    updateNotification("DNS PRE-MATCH LIMIT\nمحافظ قبل از Match: زمان نشست تمام شد");
+                    stopSelf();
+                    break;
                 }
 
                 if(now-tunnelStartedAtMs>=DNS_MIN_ACTIVE_MS &&
