@@ -308,6 +308,7 @@ public class DnsTunnelService extends VpnService {
         healthFailures++;
         updateNotification("DNS ثابت: "+dns+" • Health "+healthFailures+"/"+MAX_CONSECUTIVE_HEALTH_FAILURES+" fail");
         if(healthFailures>=MAX_CONSECUTIVE_HEALTH_FAILURES){
+            closeTunnel();
             stopSelf();
         }
     }
