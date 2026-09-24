@@ -595,6 +595,7 @@ public class MainActivity extends Activity {
             launchFF();
             return;
         }
+        getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putString("selected_dns",pendingDns).apply();
         Intent i=new Intent(this,DnsTunnelService.class);
         i.putExtra(DnsTunnelService.EXTRA_DNS,pendingDns);
         try{
