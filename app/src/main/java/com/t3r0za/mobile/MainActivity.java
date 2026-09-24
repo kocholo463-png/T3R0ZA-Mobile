@@ -686,16 +686,12 @@ public class MainActivity extends Activity {
         }
 
         long sum=0;
-        long min=Long.MAX_VALUE;
-        long max=Long.MIN_VALUE;
-        for(long ms:r.latencies){
-            sum+=ms;
-            min=Math.min(min,ms);
-            max=Math.max(max,ms);
-        }
-
+        for(long ms:r.latencies) sum+=ms;
         r.avgMs=sum/r.latencies.size();
-        r.jitterMs=max-min;
+
+        long deviationSum=0;
+        for(long ms:r.latencies) deviationSum+=Math.abs(ms-r.avgMs);
+        r.jitterMs=deviationSum/r.latencies.size();
         double successRate=r.successCount/(double)r.totalCount;
         double latencyFactor=1.0/(1.0+(r.avgMs/80.0));
         double jitterFactor=1.0/(1.0+(r.jitterMs/40.0));
@@ -865,6 +861,8 @@ public class MainActivity extends Activity {
             socket.receive(resp);
             long end=System.nanoTime();
             if(resp.getLength()<12) return -1;
+            if(resp.getData()[0]!=query[0] || resp.getData()[1]!=query[1]) return -1;
+            if((resp.getData()[2]&0x80)==0) return -1;
             return Math.max(0,(end-start)/1000000L);
         }catch(Exception e){return -1;}
         finally{if(socket!=null) socket.close();}
