@@ -164,6 +164,9 @@ public class MainActivity extends Activity {
             stableDns=value;
         }else if("thermalGuard".equals(key)){
             thermalGuard=value;
+        }else if("performanceSession".equals(key)){
+            performanceSession=value;
+            if(value) startPerformanceSession(); else stopPerformanceSession();
         }
     }
 
