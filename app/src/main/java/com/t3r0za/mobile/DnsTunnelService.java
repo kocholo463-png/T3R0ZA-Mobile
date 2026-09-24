@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
 import android.content.pm.ServiceInfo;
+import android.app.PendingIntent;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -25,6 +26,8 @@ public class DnsTunnelService extends VpnService {
     static final String EXTRA_DNS="dns";
     static final int NOTIF_ID=9101;
     static final String CHANNEL="t3r0za_dns";
+    static final String ACTION_STOP="com.t3r0za.mobile.STOP_DNS";
+    static final String ACTION_OPEN="com.t3r0za.mobile.OPEN_PANEL";
     static volatile DnsTunnelService instance;
     ParcelFileDescriptor vpnInterface;
     Thread worker;
@@ -40,6 +43,7 @@ public class DnsTunnelService extends VpnService {
     }
 
     @Override public int onStartCommand(Intent intent,int flags,int startId){
+        if(intent!=null && ACTION_STOP.equals(intent.getAction())){ stopSelf(); return START_NOT_STICKY; }
         if(intent!=null && intent.hasExtra(EXTRA_DNS)) dns=intent.getStringExtra(EXTRA_DNS);
         if(dns==null || dns.trim().isEmpty()){
             stopSelf();
@@ -56,9 +60,24 @@ public class DnsTunnelService extends VpnService {
         else b=new Notification.Builder(this);
         b.setSmallIcon(android.R.drawable.stat_sys_warning);
         b.setContentTitle("T3R0ZA DNS SESSION");
-        b.setContentText("DNS ثابت: "+dns+" • فقط هنگام بازی");
+        b.setContentText("DNS ثابت: "+dns+" • Session فعال");
         b.setOngoing(true);
         b.setCategory(Notification.CATEGORY_SERVICE);
+
+        Intent open=new Intent(this,MainActivity.class);
+        open.setAction(ACTION_OPEN);
+        int flags=PendingIntent.FLAG_UPDATE_CURRENT;
+        if(Build.VERSION.SDK_INT>=23) flags|=PendingIntent.FLAG_IMMUTABLE;
+        PendingIntent openPi=PendingIntent.getActivity(this,9102,open,flags);
+
+        Intent stop=new Intent(this,DnsTunnelService.class);
+        stop.setAction(ACTION_STOP);
+        PendingIntent stopPi=PendingIntent.getService(this,9103,stop,flags);
+
+        b.setContentIntent(openPi);
+        b.addAction(new Notification.Action.Builder(null,"OPEN T3R0ZA",openPi).build());
+        b.addAction(new Notification.Action.Builder(null,"STOP DNS",stopPi).build());
+
         Notification n=b.build();
         if(Build.VERSION.SDK_INT>=34){
             startForeground(NOTIF_ID,n,ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
