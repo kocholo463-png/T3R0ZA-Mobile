@@ -8,6 +8,7 @@ import android.provider.Settings;
 import android.view.*;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.content.IntentFilter;
 import android.widget.*;
 import java.io.File;
 import java.util.*;
@@ -97,9 +98,9 @@ public class MainActivity extends Activity {
         metricCard.addView(stats);
         root.addView(metricCard,lp(0,10));
 
-        root.addView(section("CONTROL"),lp(4,6));
+        root.addView(section("GAME CONTROL"),lp(4,6));
 
-        LinearLayout row=toggleRow("LIVE MONITOR","اندازه‌گیری لحظه‌ای وضعیت دستگاه",true);
+        LinearLayout row=toggleRow("LIVE MONITOR","وضعیت دستگاه را لحظه‌ای بررسی می‌کند",true);
         monitorSwitch=(Switch)((LinearLayout)row.getChildAt(0)).getChildAt(1);
         monitorSwitch.setOnCheckedChangeListener((v,checked)->{
             if(checked){
@@ -112,48 +113,22 @@ public class MainActivity extends Activity {
         });
         root.addView(row,lp(0,8));
 
-        row=toggleRow("KEEP SCREEN AWAKE","تا وقتی T3R0ZA باز است صفحه خاموش نشود",false);
-        screenSwitch=(Switch)((LinearLayout)row.getChildAt(0)).getChildAt(1);
-        screenSwitch.setOnCheckedChangeListener((v,checked)->{
-            if(checked){
-                getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                setStatus("● SCREEN AWAKE","جلوگیری از خاموش‌شدن صفحه فعال شد",true);
-            }else{
-                getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                setStatus("● SCREEN NORMAL","حالت عادی صفحه برگشت",true);
-            }
-        });
-        root.addView(row,lp(0,10));
+        Button prep=btn("⚡ GAME READY");
+        prep.setTextSize(16);
+        prep.setTextColor(Color.rgb(39,215,165));
+        prep.setBackground(bg(Color.rgb(15,49,45),18));
+        prep.setOnClickListener(v->gameReadyCheck());
+        root.addView(prep,lp(0,8));
 
-        Button launch=btn("اجرای مستقیم FREE FIRE");
+        Button launch=btn("▶ اجرای FREE FIRE");
         launch.setOnClickListener(v->launchFF());
         root.addView(launch,lp(0,8));
 
-        Button game=btn("باز کردن تنظیمات Game اندروید");
-        game.setOnClickListener(v->openIntent("android.settings.GAME_SETTINGS"));
-        root.addView(game,lp(0,8));
+        Button scan=btn("اسکن واقعی FREE FIRE");
+        scan.setOnClickListener(v->scanFreeFire());
+        root.addView(scan,lp(0,8));
 
-        Button battery=btn("تنظیمات باتری");
-        battery.setOnClickListener(v->openIntent(Settings.ACTION_BATTERY_SAVER_SETTINGS));
-        root.addView(battery,lp(0,8));
-
-        Button optimization=btn("Battery Optimization");
-        optimization.setOnClickListener(v->batteryOptimization());
-        root.addView(optimization,lp(0,8));
-
-        Button thermal=btn("بررسی دما و Thermal");
-        thermal.setOnClickListener(v->thermalInfo());
-        root.addView(thermal,lp(0,8));
-
-        Button display=btn("بررسی Refresh Rate");
-        display.setOnClickListener(v->displayInfo());
-        root.addView(display,lp(0,8));
-
-        Button network=btn("بررسی Network");
-        network.setOnClickListener(v->networkInfo());
-        root.addView(network,lp(0,8));
-
-        Button refresh=btn("به‌روزرسانی همه اطلاعات");
+        Button refresh=btn("به‌روزرسانی وضعیت");
         refresh.setOnClickListener(v->updateStats());
         root.addView(refresh,lp(0,12));
 
@@ -244,10 +219,12 @@ public class MainActivity extends Activity {
 
         ConnectivityManager cm=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
         String net="OFFLINE";
+        boolean validated=false;
         if(Build.VERSION.SDK_INT>=23){
             Network n=cm.getActiveNetwork();
             NetworkCapabilities nc=cm.getNetworkCapabilities(n);
             if(nc!=null){
+                validated=nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
                 if(nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) net="WIFI";
                 else if(nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) net="MOBILE";
                 else net="CONNECTED";
@@ -255,7 +232,12 @@ public class MainActivity extends Activity {
         }
 
         String thermal="N/A";
-        if(Build.VERSION.SDK_INT>=29){
+        float headroom=-1f;
+        if(Build.VERSION.SDK_INT>=30){
+            int s=pm.getCurrentThermalStatus();
+            thermal=s==PowerManager.THERMAL_STATUS_NONE?"NORMAL":s==PowerManager.THERMAL_STATUS_LIGHT?"LIGHT":s==PowerManager.THERMAL_STATUS_MODERATE?"MODERATE":s==PowerManager.THERMAL_STATUS_SEVERE?"SEVERE":s==PowerManager.THERMAL_STATUS_CRITICAL?"CRITICAL":"EMERGENCY";
+            try{headroom=pm.getThermalHeadroom(10);}catch(Exception ignored){}
+        }else if(Build.VERSION.SDK_INT>=29){
             int s=pm.getCurrentThermalStatus();
             thermal=s==PowerManager.THERMAL_STATUS_NONE?"NORMAL":s==PowerManager.THERMAL_STATUS_LIGHT?"LIGHT":s==PowerManager.THERMAL_STATUS_MODERATE?"MODERATE":s==PowerManager.THERMAL_STATUS_SEVERE?"SEVERE":s==PowerManager.THERMAL_STATUS_CRITICAL?"CRITICAL":"EMERGENCY";
         }
@@ -265,17 +247,36 @@ public class MainActivity extends Activity {
             "Battery  "+battery+"%\n"+
             "Refresh  "+String.format(Locale.US,"%.0f",hz)+" Hz\n"+
             "Storage free  "+freeMb+" MB\n"+
-            "Network  "+net+"\n"+
-            "Thermal  "+thermal+"\n"+
-            "Power saver  "+(saver?"ON":"OFF")
+            "Network  "+net+(validated?" • VALIDATED":"")+
+            "\nThermal  "+thermal+(headroom>=0?" • Headroom "+String.format(Locale.US,"%.2f",headroom):"")+
+            "\nPower saver  "+(saver?"ON":"OFF")
         );
 
         if(thermal.equals("CRITICAL") || thermal.equals("EMERGENCY")){
-            setStatus("● THERMAL ALERT","دمای سیستم بالاست؛ برای بازی فشار را کم کن.",false);
+            setStatus("● THERMAL ALERT","سیستم برای بازی داغ است و احتمال افت عملکرد وجود دارد.",false);
+        }else if(headroom>=1.0f){
+            setStatus("● PERFORMANCE READY","فشار حرارتی پایین است؛ شرایط پایدارتر است.",true);
         }else if(saver){
-            setStatus("● POWER SAVER ON","Battery Saver فعال است و ممکن است عملکرد را محدود کند.",false);
+            setStatus("● POWER SAVER ON","Battery Saver روشن است و ممکن است عملکرد محدود شود.",false);
+        }else if(!validated && !net.equals("OFFLINE")){
+            setStatus("● NETWORK CHECK","اتصال هست ولی وضعیت اینترنت قابل تأیید نیست.",false);
         }else{
-            setStatus("● READY","وضعیت سیستم در محدوده عادی است.",true);
+            setStatus("● READY","وضعیت دستگاه از نظر شاخص‌های قابل اندازه‌گیری مناسب است.",true);
+        }
+    }
+
+    void gameReadyCheck(){
+        updateStats();
+        new Handler(Looper.getMainLooper()).postDelayed(()->scanFreeFire(),250);
+        if(Build.VERSION.SDK_INT>=30){
+            PowerManager pm=(PowerManager)getSystemService(POWER_SERVICE);
+            float head=-1f;
+            try{head=pm.getThermalHeadroom(10);}catch(Exception ignored){}
+            if(head>=1.0f){
+                setStatus("● GAME READY","حرارت فعلاً فضای مناسبی دارد؛ می‌توان بازی را اجرا کرد.",true);
+            }else if(head>=0){
+                setStatus("● GAME READY: WATCH","حرارت در حال نزدیک‌شدن به محدوده فشار است.",false);
+            }
         }
     }
 
