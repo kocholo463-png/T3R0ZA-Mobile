@@ -1,6 +1,7 @@
 package com.t3r0za.mobile;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.ActivityManager;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -406,7 +407,7 @@ public class MainActivity extends Activity {
 
     void openPrivateDnsSettings(){
         try{
-            if(Build.VERSION.SDK_INT>=28) startActivity(new Intent(Settings.ACTION_PRIVATE_DNS_SETTINGS));
+            if(Build.VERSION.SDK_INT>=28) startActivity(new Intent("android.settings.PRIVATE_DNS_SETTINGS"));
             else startActivity(new Intent(Settings.ACTION_WIRELESS_SETTINGS));
         }catch(Exception e){
             try{startActivity(new Intent(Settings.ACTION_SETTINGS));}catch(Exception ignored){}
