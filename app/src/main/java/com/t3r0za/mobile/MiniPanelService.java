@@ -68,7 +68,7 @@ public class MiniPanelService extends Service {
         PendingIntent pi=PendingIntent.getActivity(this,9202,open,flags);
         b.setSmallIcon(android.R.drawable.ic_menu_manage)
          .setContentTitle("T3R0ZA MINI PANEL")
-         .setContentText("کنترل سریع داخل بازی فعال است")
+         .setContentText("پنل کوچک T3R0ZA در بازی فعال است")
          .setOngoing(true)
          .setContentIntent(pi);
         startForeground(NOTIF_ID,b.build());
@@ -106,7 +106,7 @@ public class MiniPanelService extends Service {
         top.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView title=new TextView(this);
-        title.setText("T3R0ZA");
+        title.setText("T3R0ZA\nپنل بازی");
         title.setTextColor(Color.rgb(39,215,165));
         title.setTextSize(14);
         title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
@@ -118,11 +118,11 @@ public class MiniPanelService extends Service {
         live.setTextSize(12);
         top.addView(live,new LinearLayout.LayoutParams(dp(24),dp(34)));
 
-        Button panelBtn=smallButton("PANEL");
+        Button panelBtn=smallButton("PANEL\nپنل اصلی");
         panelBtn.setOnClickListener(v->openPanel());
         top.addView(panelBtn,new LinearLayout.LayoutParams(dp(62),dp(34)));
 
-        Button hide=smallButton("HIDE");
+        Button hide=smallButton("HIDE\nمخفی");
         hide.setOnClickListener(v->hidePanel());
         top.addView(hide,new LinearLayout.LayoutParams(dp(58),dp(34)));
 
@@ -132,21 +132,21 @@ public class MiniPanelService extends Service {
 
         box.addView(top);
 
-        TextView state=miniText("LIVE CONTROL CORE");
+        TextView state=miniText("LIVE CONTROL CORE\nکنترل زنده اصلی");
         box.addView(state);
 
-        Button dns=smallButton("DNS");
+        Button dns=smallButton("DNS\nدی‌ان‌اس");
         dns.setTextColor(Color.rgb(39,215,165));
         dns.setOnClickListener(v->toggleDns(dns,state));
         box.addView(dns,new LinearLayout.LayoutParams(-1,dp(38)));
 
-        addMiniSwitch(box,"AUTO PERFORMANCE", "autoPerformance", true, state);
-        addMiniSwitch(box,"GAME PERFORMANCE", "performanceSession", false, state);
-        addMiniSwitch(box,"LIVE INPUT", "liveInput", false, state);
-        addMiniSwitch(box,"STABLE DNS", "stableDns", false, state);
-        addMiniSwitch(box,"THERMAL GUARD", "thermalGuard", true, state);
+        addMiniSwitch(box,"AUTO PERFORMANCE\nعملکرد خودکار", "autoPerformance", true, state);
+        addMiniSwitch(box,"GAME PERFORMANCE\nعملکرد بازی", "performanceSession", false, state);
+        addMiniSwitch(box,"LIVE INPUT\nپایش لمس", "liveInput", false, state);
+        addMiniSwitch(box,"STABLE DNS\nDNS پایدار", "stableDns", false, state);
+        addMiniSwitch(box,"THERMAL GUARD\nمحافظ حرارتی", "thermalGuard", true, state);
 
-        TextView guardLabel=miniText("DNS GUARD  3 FAIL");
+        TextView guardLabel=miniText("DNS GUARD  3 FAIL\nمحافظ DNS، ۳ خطا");
         guardLabel.setTextColor(Color.rgb(86,183,255));
         box.addView(guardLabel,new LinearLayout.LayoutParams(-1,dp(26)));
 
@@ -158,7 +158,7 @@ public class MiniPanelService extends Service {
         guard.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
             public void onProgressChanged(SeekBar b,int p,boolean fromUser){
                 int limit=p+1;
-                guardLabel.setText("DNS GUARD  "+limit+" FAIL");
+                guardLabel.setText("DNS GUARD  "+limit+" FAIL\nمحافظ DNS، "+limit+" خطا");
                 if(fromUser){
                     getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putInt("dns_fail_limit",limit).apply();
                     state.setText("● DNS GUARD: "+limit+" خطای پیاپی");
@@ -255,13 +255,13 @@ public class MiniPanelService extends Service {
             MainActivity.applyMiniSwitch(key,isChecked);
 
             if("stableDns".equals(key)){
-                state.setText(isChecked?"● DNS SESSION ARMED":"● DNS SESSION OFF");
+                state.setText(isChecked?"● DNS SESSION ARMED\nنشست DNS آماده":"● DNS SESSION OFF\nنشست DNS خاموش");
             }else if("autoPerformance".equals(key)){
-                state.setText(isChecked?"● PERFORMANCE CORE ON":"● PERFORMANCE CORE OFF");
+                state.setText(isChecked?"● PERFORMANCE CORE ON\nهسته عملکرد روشن":"● PERFORMANCE CORE OFF\nهسته عملکرد خاموش");
             }else if("thermalGuard".equals(key)){
-                state.setText(isChecked?"● THERMAL GUARD ON":"● THERMAL GUARD OFF");
+                state.setText(isChecked?"● THERMAL GUARD ON\nمحافظ حرارتی روشن":"● THERMAL GUARD OFF\nمحافظ حرارتی خاموش");
             }else if("liveInput".equals(key)){
-                state.setText(isChecked?"● INPUT MONITOR ON":"● INPUT MONITOR OFF");
+                state.setText(isChecked?"● INPUT MONITOR ON\nپایش لمس روشن":"● INPUT MONITOR OFF\nپایش لمس خاموش");
             }
         });
         row.addView(sw,new LinearLayout.LayoutParams(dp(56),dp(34)));
@@ -285,7 +285,7 @@ public class MiniPanelService extends Service {
         if(dnsOn || DnsTunnelService.instance!=null){
             try{stopService(new Intent(this,DnsTunnelService.class));}catch(Exception ignored){}
             dnsOn=false;
-            button.setText("DNS");
+            button.setText("DNS\nدی‌ان‌اس");
             state.setText("● DNS SESSION OFF");
             return;
         }
@@ -294,19 +294,19 @@ public class MiniPanelService extends Service {
         String dns=getSharedPreferences("t3r0za",MODE_PRIVATE).getString("selected_dns",null);
 
         if(!armed){
-            state.setText("● STABLE DNS OFF");
+            state.setText("● STABLE DNS OFF\nDNS پایدار خاموش");
             return;
         }
 
         if(dns==null || dns.isEmpty()){
-            state.setText("● DNS نیاز به BENCHMARK دارد");
+            state.setText("● DNS نیاز به BENCHMARK دارد\nنیاز به اجرای تست DNS");
             openPanel();
             return;
         }
 
         Intent prep=VpnService.prepare(this);
         if(prep!=null){
-            state.setText("● VPN PERMISSION REQUIRED");
+            state.setText("● VPN PERMISSION REQUIRED\nتأیید اتصال VPN لازم است");
             openPanel();
             return;
         }
@@ -316,10 +316,10 @@ public class MiniPanelService extends Service {
         try{
             if(Build.VERSION.SDK_INT>=26) startForegroundService(i); else startService(i);
             dnsOn=true;
-            button.setText("DNS ✓");
-            state.setText("● DNS CONNECTING  "+dns);
+            button.setText("DNS ✓\nمتصل");
+            state.setText("● DNS CONNECTING\nدر حال اتصال DNS  "+dns);
         }catch(Exception ignored){
-            state.setText("● DNS START FAILED");
+            state.setText("● DNS START FAILED\nشروع DNS ناموفق بود");
         }
     }
 
