@@ -44,7 +44,7 @@ public class MainActivity extends Activity {
         root.addView(launch,space(0,0,0,dp(7)));
 
         Button game=btn("ANDROID GAME SETTINGS");
-        game.setOnClickListener(v->openIntent(Settings.ACTION_GAME_SETTINGS));
+        game.setOnClickListener(v->openIntent("android.settings.GAME_SETTINGS"));
         root.addView(game,space(0,0,0,dp(7)));
 
         Button battery=btn("BATTERY SETTINGS");
