@@ -304,10 +304,16 @@ public class DnsTunnelService extends VpnService {
         }
     }
 
+    int getHealthFailureLimit(){
+        int value=getSharedPreferences("t3r0za",MODE_PRIVATE).getInt("dns_fail_limit",MAX_CONSECUTIVE_HEALTH_FAILURES);
+        return Math.max(1,Math.min(5,value));
+    }
+
     void healthFailure(String reason){
         healthFailures++;
-        updateNotification("DNS ثابت: "+dns+" • Health "+healthFailures+"/"+MAX_CONSECUTIVE_HEALTH_FAILURES+" fail");
-        if(healthFailures>=MAX_CONSECUTIVE_HEALTH_FAILURES){
+        int limit=getHealthFailureLimit();
+        updateNotification("DNS ثابت: "+dns+" • Health "+healthFailures+"/"+limit+" fail");
+        if(healthFailures>=limit){
             closeTunnel();
             stopSelf();
         }
