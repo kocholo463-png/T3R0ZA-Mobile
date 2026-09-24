@@ -786,6 +786,7 @@ public class MainActivity extends Activity {
         getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putString("selected_dns",pendingDns).apply();
         Intent i=new Intent(this,DnsTunnelService.class);
         i.putExtra(DnsTunnelService.EXTRA_DNS,pendingDns);
+        i.putExtra(DnsTunnelService.EXTRA_PREMATCH_ONLY,true);
         try{
             if(Build.VERSION.SDK_INT>=26) startForegroundService(i); else startService(i);
             setState("● DNS CONNECTING","DNS ثابت "+pendingDns+" در حال برقراری است؛ وضعیت Tunnel قبل از اجرای بازی تأیید می‌شود.",true);
