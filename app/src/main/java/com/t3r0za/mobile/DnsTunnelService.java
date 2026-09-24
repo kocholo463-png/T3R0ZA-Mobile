@@ -7,6 +7,8 @@ import android.net.VpnService;
 import android.app.usage.UsageEvents;
 import android.app.usage.UsageStatsManager;
 import android.content.Intent;
+import android.net.ConnectivityManager;
+import android.net.Network;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
@@ -30,6 +32,8 @@ public class DnsTunnelService extends VpnService {
 
     static final int DNS_TIMEOUT_MS=900;
     static final int DNS_HEALTH_INTERVAL_MS=5000;
+    static final long DNS_IDLE_STOP_MS=15000L;
+    static final long DNS_MIN_ACTIVE_MS=30000L;
     static final int MAX_CONSECUTIVE_HEALTH_FAILURES=3;
 
     ParcelFileDescriptor vpnInterface;
@@ -39,6 +43,8 @@ public class DnsTunnelService extends VpnService {
     volatile boolean running=false;
     volatile int healthFailures=0;
     volatile long lastDnsLatencyMs=-1;
+    volatile long lastDnsPacketAtMs=0L;
+    long tunnelStartedAtMs=0L;
     volatile long lastHealthAtMs=0;
     String dns;
     InetAddress dnsAddress;
@@ -119,6 +125,8 @@ public class DnsTunnelService extends VpnService {
         if(running) return;
         running=true;
         healthFailures=0;
+        tunnelStartedAtMs=System.currentTimeMillis();
+        lastDnsPacketAtMs=tunnelStartedAtMs;
         lastDnsLatencyMs=-1;
         lastHealthAtMs=System.currentTimeMillis();
 
@@ -156,6 +164,7 @@ public class DnsTunnelService extends VpnService {
                 stopSelf();
                 return;
             }
+            bindToActiveNetwork(dnsSocket);
             dnsSocket.setSoTimeout(DNS_TIMEOUT_MS);
             dnsSocket.connect(dnsAddress,53);
 
@@ -197,6 +206,7 @@ public class DnsTunnelService extends VpnService {
             if(dnsSocket==null || dnsSocket.isClosed()) return null;
 
             long start=System.nanoTime();
+            lastDnsPacketAtMs=System.currentTimeMillis();
             DatagramPacket q=new DatagramPacket(dnsPayload,dnsPayload.length);
             dnsSocket.send(q);
 
@@ -254,6 +264,13 @@ public class DnsTunnelService extends VpnService {
                     if(!running) break;
                 }
 
+                if(now-tunnelStartedAtMs>=DNS_MIN_ACTIVE_MS &&
+                   now-lastDnsPacketAtMs>=DNS_IDLE_STOP_MS){
+                    updateNotification("DNS PRE-MATCH GUARD\nمحافظ قبل از Match: بدون درخواست DNS، تونل خاموش شد");
+                    stopSelf();
+                    break;
+                }
+
                 if(hasUsageAccess()){
                     String pkg=currentForegroundPackage();
                     if(pkg!=null && !isGame(pkg)){
@@ -263,6 +280,22 @@ public class DnsTunnelService extends VpnService {
                 }
             }catch(Exception ignored){
             }
+        }
+    }
+
+    void bindToActiveNetwork(DatagramSocket socket){
+        if(Build.VERSION.SDK_INT<23 || socket==null) return;
+        try{
+            ConnectivityManager cm=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
+            if(cm==null) return;
+            Network network=cm.getActiveNetwork();
+            if(network!=null){
+                network.bindSocket(socket);
+                if(Build.VERSION.SDK_INT>=29 && vpnInterface!=null){
+                    try{setUnderlyingNetworks(new Network[]{network});}catch(Exception ignored){}
+                }
+            }
+        }catch(Exception ignored){
         }
     }
 
@@ -280,6 +313,7 @@ public class DnsTunnelService extends VpnService {
                 healthFailure("VPN protect failed");
                 return;
             }
+            bindToActiveNetwork(probe);
             probe.setSoTimeout(DNS_TIMEOUT_MS);
             probe.connect(dnsAddress,53);
 
