@@ -35,6 +35,11 @@ import java.util.Locale;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends Activity {
     final int BG=Color.rgb(6,12,17);
@@ -558,55 +563,147 @@ public class MainActivity extends Activity {
     static final int VPN_REQUEST=7001;
 
     void benchmarkBestDns(boolean showResult){
-        setState("● DNS TEST RUNNING","در حال تست resolverهای واقعی روی شبکه فعلی...",true);
+        setState("● DNS TEST RUNNING","resolverهای واقعی با چند درخواست و معیار پایداری بررسی می‌شوند...",true);
         new Thread(()->{
-            String best=benchmarkAndChoose();
-            final String result=best==null?
-                "هیچ resolverی پاسخ قابل‌اعتماد نداد. اتصال فعلی را بررسی کن.":
-                "BEST RESOLVER\\n"+best+"\\n\\nاین latency مربوط به DNS lookup است، نه ping داخل مچ."; 
+            ArrayList<DnsBenchResult> results=benchmarkDnsResults();
+            DnsBenchResult best=results.isEmpty()?null:results.get(0);
+            final String result=buildDnsBenchmarkReport(results);
             handler.post(()->{
                 if(showResult || best!=null){
-                    new AlertDialog.Builder(MainActivity.this).setTitle("DNS STABILITY RESULT").setMessage(result).setPositiveButton("OK",null).show();
+                    new AlertDialog.Builder(MainActivity.this)
+                        .setTitle("DNS STABILITY RESULT")
+                        .setMessage(result)
+                        .setPositiveButton("OK",null)
+                        .show();
                 }
-                setState(best==null?"● DNS TEST FAILED":"● DNS TEST COMPLETE",best==null?"resolver قابل‌اعتماد پیدا نشد.":"بهترین resolver بر اساس پاسخ واقعی شبکه مشخص شد.",best!=null);
+                setState(best==null?"● DNS TEST FAILED":"● DNS TEST COMPLETE",
+                    best==null?"resolver قابل‌اعتماد پیدا نشد.":"بهترین resolver بر اساس latency، success rate و jitter انتخاب شد.",
+                    best!=null);
             });
         }).start();
     }
 
     String benchmarkAndChoose(){
-        ArrayList<String> candidates=new ArrayList<>(Arrays.asList(DNS_SERVERS));
-        ArrayList<String> good=new ArrayList<>();
-        for(String server:candidates){
-            long a=dnsProbe(server,"example.com",1200);
-            long b=dnsProbe(server,"connectivitycheck.gstatic.com",1200);
-            if(a>=0 && b>=0){
-                long avg=(a+b)/2L;
-                good.add(server+"|"+avg);
-            }
-        }
-        Collections.sort(good,(a,b)->Long.compare(extractMs(a),extractMs(b)));
-        if(good.isEmpty()) return null;
-        String raw=good.get(0);
-        return raw.substring(0,raw.indexOf("|"));
+        ArrayList<DnsBenchResult> results=benchmarkDnsResults();
+        return results.isEmpty()?null:results.get(0).server;
     }
 
-    void startDnsVpnAndLaunch(){
-        if(pendingDns==null || pendingDns.isEmpty()){
-            launchFF();
-            return;
+    ArrayList<DnsBenchResult> benchmarkDnsResults(){
+        ArrayList<DnsBenchResult> results=new ArrayList<>();
+        ExecutorService pool=Executors.newFixedThreadPool(Math.min(8,DNS_SERVERS.length));
+        ArrayList<Future<DnsBenchResult>> futures=new ArrayList<>();
+
+        for(String server:DNS_SERVERS){
+            futures.add(pool.submit(new Callable<DnsBenchResult>(){
+                @Override public DnsBenchResult call(){
+                    return measureDnsServer(server);
+                }
+            }));
         }
-        getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putString("selected_dns",pendingDns).apply();
-        Intent i=new Intent(this,DnsTunnelService.class);
-        i.putExtra(DnsTunnelService.EXTRA_DNS,pendingDns);
-        try{
-            if(Build.VERSION.SDK_INT>=26) startForegroundService(i); else startService(i);
-            setState("● DNS CONNECTING","DNS ثابت "+pendingDns+" در حال برقراری است؛ سپس Free Fire باز می‌شود.",true);
-            handler.postDelayed(()->{
-                launchFF();
-            },700);
-        }catch(Exception e){
-            setState("● DNS SESSION FAILED","VPN سیستم اجازه شروع نداد؛ بازی بدون این DNS اجرا می‌شود.",false);
-            launchFF();
+
+        for(Future<DnsBenchResult> future:futures){
+            try{
+                DnsBenchResult r=future.get(9000,TimeUnit.MILLISECONDS);
+                if(r!=null && r.successCount>0) results.add(r);
+            }catch(Exception ignored){}
+        }
+
+        pool.shutdownNow();
+        Collections.sort(results,(a,b)->{
+            int scoreCompare=Double.compare(b.score,a.score);
+            if(scoreCompare!=0) return scoreCompare;
+            int successCompare=Integer.compare(b.successCount,a.successCount);
+            if(successCompare!=0) return successCompare;
+            return Long.compare(a.avgMs,b.avgMs);
+        });
+        return results;
+    }
+
+    DnsBenchResult measureDnsServer(String server){
+        DnsBenchResult r=new DnsBenchResult(server);
+        String[] hosts={"example.com","connectivitycheck.gstatic.com"};
+        int rounds=3;
+
+        for(int round=0;round<rounds;round++){
+            for(String host:hosts){
+                long ms=dnsProbe(server,host,900);
+                r.totalCount++;
+                if(ms>=0){
+                    r.successCount++;
+                    r.latencies.add(ms);
+                }
+            }
+        }
+
+        if(r.successCount==0){
+            r.avgMs=Long.MAX_VALUE;
+            r.jitterMs=Long.MAX_VALUE;
+            r.score=0;
+            return r;
+        }
+
+        long sum=0;
+        long min=Long.MAX_VALUE;
+        long max=Long.MIN_VALUE;
+        for(long ms:r.latencies){
+            sum+=ms;
+            min=Math.min(min,ms);
+            max=Math.max(max,ms);
+        }
+
+        r.avgMs=sum/r.latencies.size();
+        r.jitterMs=max-min;
+        double successRate=r.successCount/(double)r.totalCount;
+        double latencyFactor=1.0/(1.0+(r.avgMs/80.0));
+        double jitterFactor=1.0/(1.0+(r.jitterMs/40.0));
+        r.score=(successRate*0.55)+(latencyFactor*0.30)+(jitterFactor*0.15);
+        return r;
+    }
+
+    String buildDnsBenchmarkReport(ArrayList<DnsBenchResult> results){
+        if(results.isEmpty()){
+            return "هیچ resolverی پاسخ قابل‌اعتماد نداد.\n\nاتصال فعلی یا شبکه را بررسی کن.";
+        }
+
+        StringBuilder s=new StringBuilder();
+        DnsBenchResult best=results.get(0);
+        s.append("SELECTED DNS\\n");
+        s.append(best.server).append("\\n");
+        s.append("Score: ").append(String.format(Locale.US,"%.3f",best.score)).append("\\n");
+        s.append("Success: ").append(best.successCount).append("/").append(best.totalCount).append("\\n");
+        s.append("Average: ").append(best.avgMs).append(" ms\\n");
+        s.append("Jitter: ").append(best.jitterMs).append(" ms\\n\\n");
+        s.append("TOP STABLE RESOLVERS\\n");
+
+        int count=Math.min(5,results.size());
+        for(int i=0;i<count;i++){
+            DnsBenchResult r=results.get(i);
+            s.append(i+1).append(". ").append(r.server)
+                .append("  ")
+                .append(String.format(Locale.US,"%.3f",r.score))
+                .append("  ")
+                .append(r.successCount).append("/").append(r.totalCount)
+                .append("  ")
+                .append(r.avgMs).append("ms")
+                .append("  J").append(r.jitterMs).append("ms\\n");
+        }
+
+        s.append("\\nاین اعداد DNS lookup هستند، نه ping داخل مچ. ");
+        s.append("حین بازی DNS انتخاب‌شده عوض نمی‌شود.");
+        return s.toString();
+    }
+
+    static class DnsBenchResult{
+        String server;
+        int totalCount;
+        int successCount;
+        long avgMs;
+        long jitterMs;
+        double score;
+        ArrayList<Long> latencies=new ArrayList<>();
+
+        DnsBenchResult(String server){
+            this.server=server;
         }
     }
 
@@ -650,13 +747,6 @@ public class MainActivity extends Activity {
         }catch(Exception e){
             Toast.makeText(this,"Usage Access settings are not available",Toast.LENGTH_SHORT).show();
         }
-    }
-
-    long extractMs(String s){
-        try{
-            int p=s.lastIndexOf("|");
-            return Long.parseLong(s.substring(p+1));
-        }catch(Exception e){return Long.MAX_VALUE;}
     }
 
     long dnsProbe(String server,String host,int timeoutMs){
