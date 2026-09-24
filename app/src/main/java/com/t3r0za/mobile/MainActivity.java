@@ -62,6 +62,7 @@ public class MainActivity extends Activity {
     boolean liveInput=true;
     boolean stableDns=false;
     boolean thermalGuard=true;
+    boolean miniPanel=false;
     int telemetryIntervalMs=1200;
 
     int dp(float v){
@@ -226,6 +227,10 @@ public class MainActivity extends Activity {
         stopDns.setOnClickListener(v->stopDnsSession());
         pc.addView(stopDns,lp(0,8));
 
+        Button mini=btn("🎮 ENABLE MINI IN-GAME PANEL");
+        mini.setOnClickListener(v->toggleMiniPanel());
+        pc.addView(mini,lp(0,8));
+
         Button usage=btn("⚙ ENABLE AUTO-STOP PERMISSION");
         usage.setOnClickListener(v->openUsageAccess());
         pc.addView(usage,lp(0,8));
@@ -252,6 +257,11 @@ public class MainActivity extends Activity {
             setState(v?"● INPUT MONITOR ON":"● INPUT MONITOR OFF",v?"اندازه‌گیری ورودی فعال شد.":"اندازه‌گیری ورودی غیرفعال شد.",true);
         });
 
+        addSwitchRow(cc,"MINI IN-GAME PANEL","پنل کوچک روی بازی؛ فقط کنترل‌های واقعی T3R0ZA مثل DNS، مانیتور و بازگشت به پنل.",miniPanel,v->{
+            miniPanel=v;
+            if(v) startMiniPanelIfAllowed(); else stopMiniPanel();
+        });
+
         addSwitchRow(cc,"STABLE DNS SESSION","DNS فقط در صورت تأیید کاربر و برای Session مشخص؛ بدون تعویض مداوم.",stableDns,v->{
             stableDns=v;
             setState(v?"● DNS SESSION ARMED":"● DNS SESSION OFF",v?"برای Session بعدی DNS پایدار فعال است.":"DNS VPN خودکار غیرفعال شد.",true);
@@ -272,7 +282,7 @@ public class MainActivity extends Activity {
 
         root.addView(cc);
 
-        TextView note=tv("این برنامه نشانه‌گیری یا شلیک خودکار انجام نمی‌دهد. حساسیت بازی را مستقیماً دستکاری نمی‌کند؛ در عوض داده‌ی واقعی لمس و عملکرد گوشی را اندازه می‌گیرد تا تنظیم دستی قابل‌اعتمادتر شود.",9);
+        TextView note=tv("پنل داخل بازی فقط یک کنترل سریع سیستم است: DNS session، وضعیت مانیتور و بازگشت به T3R0ZA. هیچ لمس خودکار، auto-aim، auto-shoot، تزریق یا تغییر فایل بازی انجام نمی‌شود.",9);
         note.setTextColor(MUTED);
         root.addView(note,lp(12,0));
 
@@ -606,6 +616,33 @@ public class MainActivity extends Activity {
         }catch(Exception ignored){}
     }
 
+    void toggleMiniPanel(){
+        if(!Settings.canDrawOverlays(this)){
+            try{
+                startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:"+getPackageName())));
+                Toast.makeText(this,"مجوز نمایش روی بازی را یک‌بار فعال کن.",Toast.LENGTH_LONG).show();
+            }catch(Exception e){
+                Toast.makeText(this,"Overlay permission unavailable",Toast.LENGTH_SHORT).show();
+            }
+            return;
+        }
+        miniPanel=true;
+        startMiniPanelIfAllowed();
+        setState("● MINI PANEL ON","پنل کوچک روی بازی فعال شد؛ هیچ auto-aim یا کنترل خودکار لمس ندارد.",true);
+    }
+
+    void startMiniPanelIfAllowed(){
+        if(!Settings.canDrawOverlays(this)) return;
+        Intent i=new Intent(this,MiniPanelService.class);
+        try{
+            if(Build.VERSION.SDK_INT>=26) startForegroundService(i); else startService(i);
+        }catch(Exception ignored){}
+    }
+
+    void stopMiniPanel(){
+        try{stopService(new Intent(this,MiniPanelService.class));}catch(Exception ignored){}
+    }
+
     void openUsageAccess(){
         try{
             startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS));
@@ -669,6 +706,7 @@ public class MainActivity extends Activity {
             try{
                 Intent i=getPackageManager().getLaunchIntentForPackage(p);
                 if(i!=null){
+                    if(miniPanel) startMiniPanelIfAllowed();
                     stopTelemetry();
                     startActivity(i);
                     return;
