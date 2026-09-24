@@ -966,6 +966,11 @@ public class MainActivity extends Activity {
                 Intent i=getPackageManager().getLaunchIntentForPackage(p);
                 if(i!=null){
                     if(miniPanel) startMiniPanelIfAllowed();
+                    if(performanceSession && Build.VERSION.SDK_INT>=26 &&
+                       (Build.VERSION.SDK_INT<23 || Settings.System.canWrite(this)) &&
+                       hasUsageAccess()){
+                        try{startForegroundService(new Intent(this,PerformanceSessionService.class));}catch(Exception ignored){}
+                    }
                     stopTelemetry();
                     startActivity(i);
                     return;
