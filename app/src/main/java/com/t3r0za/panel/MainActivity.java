@@ -1,7 +1,6 @@
 package com.t3r0za.panel;
 
 import android.app.Activity;
-import android.app.GameManager;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
@@ -211,7 +210,7 @@ public class MainActivity extends Activity {
         LinearLayout diagnostics = card();
         diagnostics.addView(sectionTitle("DEVICE / GAME DIAGNOSTICS"));
         diagnostics.addView(text(
-                "این پنل فقط داده‌هایی را نشان می‌دهد که Android واقعاً در اختیار اپ قرار می‌دهد؛ Game Mode فقط گزارش می‌شود و به‌زور برای بازی دیگری تغییر داده نمی‌شود.",
+                "این پنل فقط داده‌هایی را نشان می‌دهد که Android واقعاً در اختیار اپ قرار می‌دهد؛ کنترل Game Mode برای یک بازی دیگر در اختیار اپ عادی نیست.",
                 10,
                 Color.rgb(140, 152, 174)
         ), full(dp(62)));
@@ -530,35 +529,10 @@ public class MainActivity extends Activity {
             return;
         }
 
-        String mode = "UNAVAILABLE";
-
-        if (Build.VERSION.SDK_INT >= 31) {
-            try {
-                GameManager manager = getSystemService(GameManager.class);
-                if (manager != null) {
-                    int current = manager.getGameMode();
-
-                    if (current == GameManager.GAME_MODE_PERFORMANCE) {
-                        mode = "PERFORMANCE";
-                    } else if (current == GameManager.GAME_MODE_BATTERY) {
-                        mode = "BATTERY";
-                    } else if (current == GameManager.GAME_MODE_STANDARD) {
-                        mode = "STANDARD";
-                    } else if (current == GameManager.GAME_MODE_CUSTOM) {
-                        mode = "CUSTOM";
-                    } else {
-                        mode = String.valueOf(current);
-                    }
-                }
-            } catch (SecurityException error) {
-                mode = "SYSTEM-RESTRICTED";
-            }
-        }
-
         gameValue.setText(
                 "Detected package: " + packageName +
-                        "\nAndroid Game Mode report: " + mode +
-                        "\nGame settings are opened through Android settings."
+                        "\nDirect game controls: Android does not expose them to a normal companion app." +
+                        "\nFree Fire App Settings: available below."
         );
     }
 
