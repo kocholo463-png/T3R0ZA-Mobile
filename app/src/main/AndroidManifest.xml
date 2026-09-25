@@ -3,7 +3,6 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
     <queries>
         <package android:name="com.dts.freefireth" />
@@ -25,10 +24,6 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name="com.t3r0za.mobile.MainActivity"
-            android:exported="false" />
-
         <service
             android:name=".OverlayService"
             android:exported="false"
@@ -38,12 +33,8 @@
                 android:value="floating game performance panel" />
         </service>
 
-        <activity
-            android:name="com.t3r0za.mobile.MainActivity"
-            android:exported="false" />
-
         <service
-            android:name="com.t3r0za.mobile.MiniPanelService"
+            android:name=".MiniPanelService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
             <property
@@ -52,7 +43,7 @@
         </service>
 
         <service
-            android:name="com.t3r0za.mobile.PerformanceSessionService"
+            android:name=".PerformanceSessionService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
             <property
@@ -61,38 +52,7 @@
         </service>
 
         <service
-            android:name="com.t3r0za.mobile.DnsTunnelService"
-            android:permission="android.permission.BIND_VPN_SERVICE"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <intent-filter>
-                <action android:name="android.net.VpnService" />
-            </intent-filter>
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="user-controlled DNS session" />
-        </service>
-
-        <service
-            android:name="com.t3r0za.mobile.MiniPanelService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="floating in-game performance panel" />
-        </service>
-
-        <service
-            android:name="com.t3r0za.mobile.PerformanceSessionService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="game performance session" />
-        </service>
-
-        <service
-            android:name="com.t3r0za.mobile.DnsTunnelService"
+            android:name=".DnsTunnelService"
             android:permission="android.permission.BIND_VPN_SERVICE"
             android:exported="false"
             android:foregroundServiceType="specialUse">
