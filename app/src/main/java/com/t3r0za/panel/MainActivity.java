@@ -3,6 +3,7 @@ package com.t3r0za.panel;
 import android.app.Activity;
 import android.app.GameManager;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.ConnectivityManager;
 import android.net.Network;
@@ -14,13 +15,13 @@ import android.os.Bundle;
 import android.os.Debug;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.view.Display;
 import android.view.Gravity;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
-import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -33,23 +34,25 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
+    private static final String PREFS = "t3r0za_state";
+    private static final String PREF_OLD_PEAK = "old_peak";
+    private static final String PREF_OLD_MIN = "old_min";
+    private static final String KEY_PEAK_REFRESH = "peak_refresh_rate";
+    private static final String KEY_MIN_REFRESH = "min_refresh_rate";
+
     private static final String[] DNS_NAMES = {"Cloudflare", "Google", "Quad9"};
     private static final String[] DNS_IPS = {"1.1.1.1", "8.8.8.8", "9.9.9.9"};
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
-    private TextView performanceValue;
-    private TextView touchValue;
-    private TextView aimValue;
-    private TextView dnsValue;
-    private TextView thermalValue;
+    private TextView systemValue;
     private TextView gameValue;
-    private TextView deviceValue;
+    private TextView networkValue;
+    private TextView thermalValue;
+    private TextView actionValue;
 
-    private int performanceLevel = 100;
-    private int touchLevel = 70;
-    private int aimLevel = 70;
-    private int networkLevel = 70;
+    private SharedPreferences prefs;
+    private float selectedRefresh = 120f;
 
     private int dp(float value) {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
@@ -67,7 +70,7 @@ public class MainActivity extends Activity {
     private LinearLayout card() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(10), dp(9), dp(10), dp(9));
+        card.setPadding(dp(12), dp(10), dp(12), dp(10));
         card.setBackgroundResource(R.drawable.bg_card);
         return card;
     }
@@ -81,19 +84,21 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        buildFullPanel();
+        prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        buildPanel();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        refreshGameState();
-        refreshDeviceState();
+        refreshAll();
     }
 
-    private void buildFullPanel() {
+    private void buildPanel() {
         Window window = getWindow();
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        window.setStatusBarColor(Color.rgb(5, 8, 14));
+        window.setNavigationBarColor(Color.rgb(5, 8, 14));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
@@ -104,159 +109,128 @@ public class MainActivity extends Activity {
         root.setPadding(dp(14), dp(18), dp(14), dp(24));
 
         LinearLayout hero = card();
-        TextView logo = text("⚡", 34, Color.rgb(99, 230, 255));
+        TextView logo = text("T3R0ZA", 30, Color.rgb(99, 230, 255));
         logo.setGravity(Gravity.CENTER);
-        hero.addView(logo, new LinearLayout.LayoutParams(-1, dp(50)));
+        logo.setTypeface(null, 1);
+        hero.addView(logo, new LinearLayout.LayoutParams(-1, dp(48)));
 
-        TextView title = text("PANEL T3R0ZA", 24, Color.WHITE);
-        title.setTypeface(null, 1);
-        title.setGravity(Gravity.CENTER);
-        hero.addView(title, new LinearLayout.LayoutParams(-1, dp(38)));
+        TextView badge = text("⚡ 120 FPS PERFORMANCE PANEL", 13, Color.rgb(155, 123, 255));
+        badge.setGravity(Gravity.CENTER);
+        badge.setTypeface(null, 1);
+        hero.addView(badge, new LinearLayout.LayoutParams(-1, dp(34)));
 
         TextView subtitle = text(
-                "Full Performance Panel • سبک، واقعی و بدون قابلیت تقلب",
-                12,
+                "Real Android controls • Real Free Fire launch • No auto-aim",
+                11,
                 Color.rgb(140, 152, 174)
         );
         subtitle.setGravity(Gravity.CENTER);
-        hero.addView(subtitle, new LinearLayout.LayoutParams(-1, dp(38)));
+        hero.addView(subtitle, new LinearLayout.LayoutParams(-1, dp(32)));
         root.addView(hero);
 
-        LinearLayout performance = card();
-        performance.addView(sectionTitle("FPS / PERFORMANCE"));
-        performanceValue = text("", 12, Color.WHITE);
-        performance.addView(performanceValue, full(dp(34)));
-        SeekBar performanceBar = makeSeekBar(performanceLevel);
-        performance.addView(performanceBar, full(dp(40)));
-        performanceBar.setOnSeekBarChangeListener(listener(v -> {
-            performanceLevel = v;
-            applyPerformanceProfile(performanceBar.getProgress());
-        }));
-        TextView performanceNote = text(
-                "این کنترل، فرکانس پایش داخلی پنل و ترجیح Refresh Rate پنجره خود T3R0ZA را تنظیم می‌کند. کنترل مستقیم FPS برنامه دیگری از اپ عادی اندروید ممکن نیست.",
-                10,
-                Color.rgb(140, 152, 174)
-        );
-        performance.addView(performanceNote, full(dp(60)));
-        root.addView(performance);
+        LinearLayout fps = card();
+        fps.addView(sectionTitle("FPS / DISPLAY CONTROL"));
+        systemValue = text("", 12, Color.WHITE);
+        fps.addView(systemValue, full(dp(86)));
 
-        LinearLayout touch = card();
-        touch.addView(sectionTitle("TOUCH"));
-        touchValue = text("", 12, Color.WHITE);
-        touch.addView(touchValue, full(dp(34)));
-        SeekBar touchBar = makeSeekBar(touchLevel);
-        touch.addView(touchBar, full(dp(40)));
-        touchBar.setOnSeekBarChangeListener(listener(v -> {
-            touchLevel = v;
-            applyTouchProfile(touchBar.getProgress());
-        }));
-        touch.addView(text(
-                "اسلایدر مقدار هدف تست و کالیبراسیون داخلی را تنظیم می‌کند؛ درایور تاچ یا ورودی Free Fire را دستکاری نمی‌کند.",
-                10,
-                Color.rgb(140, 152, 174)
-        ), full(dp(48)));
-        root.addView(touch);
+        LinearLayout rateRow = new LinearLayout(this);
+        rateRow.setOrientation(LinearLayout.HORIZONTAL);
+        addRateButton(rateRow, "60 Hz", 60f);
+        addRateButton(rateRow, "90 Hz", 90f);
+        addRateButton(rateRow, "120 Hz", 120f);
+        addRateButton(rateRow, "RESTORE", 0f);
+        fps.addView(rateRow, full(dp(52)));
 
-        LinearLayout aim = card();
-        aim.addView(sectionTitle("AIM / HEADSHOT CONTROL"));
-        aimValue = text("", 12, Color.WHITE);
-        aim.addView(aimValue, full(dp(34)));
-        SeekBar aimBar = makeSeekBar(aimLevel);
-        aim.addView(aimBar, full(dp(40)));
-        aimBar.setOnSeekBarChangeListener(listener(v -> {
-            aimLevel = v;
-            applyAimProfile(aimBar.getProgress());
-        }));
-        aim.addView(text(
-                "این بخش فقط پروفایل کنترل دستی و کالیبراسیون را نگه می‌دارد. Auto Aim، Auto Headshot و Recoil Automation وجود ندارد.",
-                10,
-                Color.rgb(140, 152, 174)
-        ), full(dp(48)));
-        root.addView(aim);
+        Button displaySettings = actionButton("⚙  Open Display Settings");
+        displaySettings.setOnClickListener(v -> openDisplaySettings());
+        fps.addView(displaySettings, full(dp(46)));
 
-        LinearLayout network = card();
-        network.addView(sectionTitle("DNS / NETWORK"));
-        dnsValue = text("آماده تست", 12, Color.WHITE);
-        network.addView(dnsValue, full(dp(56)));
-        SeekBar networkBar = makeSeekBar(networkLevel);
-        network.addView(networkBar, full(dp(40)));
-        networkBar.setOnSeekBarChangeListener(listener(v -> {
-            networkLevel = v;
-            applyNetworkProfile(networkBar.getProgress());
-        }));
-        TextView dnsAction = text(
-                "⚡ برای تست و انتخاب DNS لمس کن",
-                12,
-                Color.rgb(99, 230, 255)
-        );
-        dnsAction.setGravity(Gravity.CENTER);
-        dnsAction.setOnClickListener(v -> runDnsTest());
-        network.addView(dnsAction, full(dp(42)));
-        network.addView(text(
-                "انتخاب DNS بر اساس پاسخ واقعی همین اتصال انجام می‌شود و تا پایان نشست تغییر نمی‌کند. تغییر DNS سراسری بدون VPN/دسترسی سیستم قابل تضمین نیست.",
+        fps.addView(text(
+                "120 Hz فقط وقتی دستگاه و سیستم آن را پشتیبانی کنند اعمال می‌شود. در صورت داشتن دسترسی WRITE_SETTINGS، مقدار refresh سیستم تغییر می‌کند؛ وگرنه صفحه مجوز سیستم باز می‌شود.",
                 10,
                 Color.rgb(140, 152, 174)
-        ), full(dp(60)));
-        root.addView(network);
+        ), full(dp(64)));
+        root.addView(fps);
 
         LinearLayout game = card();
         game.addView(sectionTitle("FREE FIRE"));
         gameValue = text("", 12, Color.WHITE);
-        game.addView(gameValue, full(dp(60)));
+        game.addView(gameValue, full(dp(70)));
 
-        TextView settingsLink = text(
-                "⚙ تنظیمات خود Free Fire",
-                12,
-                Color.rgb(99, 230, 255)
-        );
-        settingsLink.setGravity(Gravity.CENTER);
-        settingsLink.setOnClickListener(v -> openGameSettings());
-        game.addView(settingsLink, full(dp(42)));
+        Button gameSettings = actionButton("⚙  Free Fire App Settings");
+        gameSettings.setOnClickListener(v -> openGameSettings());
+        game.addView(gameSettings, full(dp(46)));
+
+        Button launch = actionButton("🎮  APPLY + LAUNCH FREE FIRE");
+        launch.setOnClickListener(v -> launchGame());
+        game.addView(launch, full(dp(52)));
+
+        game.addView(text(
+                "قبل از اجرا، refresh انتخاب‌شده برای سیستم تلاش می‌شود اعمال شود؛ سپس بستهٔ واقعی Free Fire باز می‌شود.",
+                10,
+                Color.rgb(140, 152, 174)
+        ), full(dp(46)));
         root.addView(game);
+
+        LinearLayout network = card();
+        network.addView(sectionTitle("NETWORK"));
+        networkValue = text("Network diagnostic آماده است.", 12, Color.WHITE);
+        network.addView(networkValue, full(dp(76)));
+
+        Button dnsTest = actionButton("⚡  TEST DNS LATENCY");
+        dnsTest.setOnClickListener(v -> runDnsTest());
+        network.addView(dnsTest, full(dp(46)));
+
+        Button networkSettings = actionButton("⚙  Open Network Settings");
+        networkSettings.setOnClickListener(v -> openNetworkSettings());
+        network.addView(networkSettings, full(dp(46)));
+
+        network.addView(text(
+                "تست DNS یک اندازه‌گیری واقعی از پاسخ سرور است. خود Android اجازهٔ تغییر Private DNS سراسری را به یک اپ عادی بدون مجوز سیستمی نمی‌دهد، بنابراین این بخش مقدار ساختگی نمایش نمی‌دهد.",
+                10,
+                Color.rgb(140, 152, 174)
+        ), full(dp(72)));
+        root.addView(network);
 
         LinearLayout thermal = card();
         thermal.addView(sectionTitle("THERMAL / STABILITY"));
         thermalValue = text("", 12, Color.WHITE);
-        thermal.addView(thermalValue, full(dp(62)));
+        thermal.addView(thermalValue, full(dp(82)));
+
+        Button batterySettings = actionButton("🔋  Battery Saver Settings");
+        batterySettings.setOnClickListener(v -> openBatterySaverSettings());
+        thermal.addView(batterySettings, full(dp(46)));
+
         thermal.addView(text(
-                "پایش حرارت برای جلوگیری از اضافه‌بار خود پنل استفاده می‌شود؛ وقتی حرارت بالا برود، پایش سبک‌تر می‌شود.",
+                "این بخش وضعیت واقعی حرارت و Power Saver را می‌خواند. خاموش‌کردن Power Saver از داخل اپ عادی به‌صورت بی‌صدا مجاز نیست؛ صفحهٔ رسمی سیستم باز می‌شود.",
                 10,
                 Color.rgb(140, 152, 174)
-        ), full(dp(48)));
+        ), full(dp(64)));
         root.addView(thermal);
 
-        LinearLayout device = card();
-        device.addView(sectionTitle("DEVICE"));
-        deviceValue = text("", 12, Color.WHITE);
-        device.addView(deviceValue, full(dp(100)));
-        root.addView(device);
-
-        LinearLayout launchCard = card();
-        launchCard.addView(sectionTitle("LAUNCH"));
-        Button launch = new Button(this);
-        launch.setText("🎮  LAUNCH FREE FIRE");
-        launch.setTextColor(Color.WHITE);
-        launch.setTextSize(14);
-        launch.setAllCaps(false);
-        launch.setBackgroundResource(R.drawable.bg_button);
-        launch.setOnClickListener(v -> launchGame());
-        launchCard.addView(launch, full(dp(52)));
-        launchCard.addView(text(
-                "پروفایل انتخاب‌شده ابتدا اعمال می‌شود، سپس Free Fire باز می‌شود.",
+        LinearLayout diagnostics = card();
+        diagnostics.addView(sectionTitle("DEVICE / GAME DIAGNOSTICS"));
+        diagnostics.addView(text(
+                "این پنل فقط داده‌هایی را نشان می‌دهد که Android واقعاً در اختیار اپ قرار می‌دهد؛ Game Mode فقط گزارش می‌شود و به‌زور برای بازی دیگری تغییر داده نمی‌شود.",
                 10,
                 Color.rgb(140, 152, 174)
-        ), full(dp(34)));
-        root.addView(launchCard);
+        ), full(dp(62)));
+
+        Button refresh = actionButton("↻  REFRESH STATUS");
+        refresh.setOnClickListener(v -> refreshAll());
+        diagnostics.addView(refresh, full(dp(46)));
+        root.addView(diagnostics);
+
+        actionValue = text(
+                "Ready. هیچ قابلیت Auto Aim / Auto Headshot / Recoil Automation فعال نیست.",
+                11,
+                Color.rgb(94, 227, 154)
+        );
+        actionValue.setGravity(Gravity.CENTER);
+        root.addView(actionValue, full(dp(56)));
 
         scroll.addView(root);
         setContentView(scroll);
-
-        applyPerformanceProfile(performanceLevel);
-        applyTouchProfile(touchLevel);
-        applyAimProfile(aimLevel);
-        applyNetworkProfile(networkLevel);
-        refreshGameState();
-        refreshDeviceState();
     }
 
     private TextView sectionTitle(String title) {
@@ -265,135 +239,330 @@ public class MainActivity extends Activity {
         return view;
     }
 
-    private SeekBar makeSeekBar(int progress) {
-        SeekBar bar = new SeekBar(this);
-        bar.setMax(100);
-        bar.setProgress(progress);
-        return bar;
+    private Button actionButton(String label) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setTextColor(Color.WHITE);
+        button.setTextSize(12);
+        button.setAllCaps(false);
+        button.setBackgroundResource(R.drawable.bg_button);
+        return button;
     }
 
-    private SeekBar.OnSeekBarChangeListener listener(
-            java.util.function.Consumer<Integer> consumer
-    ) {
-        return new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
-                consumer.accept(progress);
-            }
+    private void addRateButton(LinearLayout row, String label, float hz) {
+        Button button = actionButton(label);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -1, 1f);
+        p.setMargins(dp(3), 0, dp(3), 0);
+        row.addView(button, p);
 
-            @Override
-            public void onStartTrackingTouch(SeekBar bar) {
+        button.setOnClickListener(v -> {
+            if (hz == 0f) {
+                restoreRefreshSettings();
+            } else {
+                selectedRefresh = hz;
+                applyRefresh(hz, true);
             }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar bar) {
-            }
-        };
+        });
     }
 
-    private void applyPerformanceProfile(int value) {
-        int pollMs = 3500 - (value * 25);
-        pollMs = Math.max(1000, pollMs);
+    private void refreshAll() {
+        refreshSystemState();
+        refreshGameState();
+        refreshThermalState();
+    }
 
-        float[] rates = getWindow().getWindowManager().getDefaultDisplay().getSupportedRefreshRates();
-        float selected = 0f;
+    private Display getDefaultDisplayCompat() {
+        WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+        return wm == null ? null : wm.getDefaultDisplay();
+    }
 
-        if (rates != null && rates.length > 0) {
-            for (float rate : rates) {
-                if (rate > selected && rate <= Math.max(60f, value + 30f)) {
-                    selected = rate;
+    private float maxSupportedRefresh() {
+        Display display = getDefaultDisplayCompat();
+        if (display == null) {
+            return 60f;
+        }
+
+        float max = display.getRefreshRate();
+
+        if (Build.VERSION.SDK_INT >= 23) {
+            Display.Mode[] modes = display.getSupportedModes();
+            if (modes != null) {
+                for (Display.Mode mode : modes) {
+                    max = Math.max(max, mode.getRefreshRate());
                 }
             }
-            if (selected == 0f) {
-                selected = rates[rates.length - 1];
+        }
+
+        return max;
+    }
+
+    private float currentRefresh() {
+        Display display = getDefaultDisplayCompat();
+        return display == null ? 60f : display.getRefreshRate();
+    }
+
+    private void refreshSystemState() {
+        float current = currentRefresh();
+        float max = maxSupportedRefresh();
+        boolean canWrite = Build.VERSION.SDK_INT < 23 || Settings.System.canWrite(this);
+
+        systemValue.setText(
+                String.format(
+                        Locale.US,
+                        "Current display: %.0f Hz\nMaximum reported: %.0f Hz\nWRITE_SETTINGS: %s\nTarget for launch: %.0f Hz",
+                        current,
+                        max,
+                        canWrite ? "GRANTED" : "NOT GRANTED",
+                        Math.min(selectedRefresh, max)
+                )
+        );
+    }
+
+    private void applyRefresh(float requestedHz, boolean showMessage) {
+        float max = maxSupportedRefresh();
+        float hz = requestedHz;
+
+        if (hz > max + 0.5f) {
+            actionValue.setText(
+                    String.format(
+                            Locale.US,
+                            "120 Hz روی این دستگاه گزارش نشده؛ بیشترین refresh فعلی %.0f Hz است.",
+                            max
+                    )
+            );
+            if (showMessage) {
+                Toast.makeText(
+                        this,
+                        String.format(Locale.US, "Maximum supported refresh: %.0f Hz", max),
+                        Toast.LENGTH_LONG
+                ).show();
             }
-        }
-
-        if (Build.VERSION.SDK_INT >= 21 && selected > 0f) {
-            WindowManager.LayoutParams lp = getWindow().getAttributes();
-            lp.preferredRefreshRate = selected;
-            getWindow().setAttributes(lp);
-        }
-
-        performanceValue.setText(
-                String.format(
-                        Locale.US,
-                        "Performance: %d%% • Panel polling: %d ms • Window refresh target: %.0f Hz",
-                        value,
-                        pollMs,
-                        selected > 0f ? selected : 60f
-                )
-        );
-    }
-
-    private void applyTouchProfile(int value) {
-        int testWindow = 20 + value * 2;
-        touchValue.setText(
-                String.format(
-                        Locale.US,
-                        "Touch profile: %d%% • Calibration window: %d samples",
-                        value,
-                        testWindow
-                )
-        );
-    }
-
-    private void applyAimProfile(int value) {
-        int stability = Math.max(1, 100 - value);
-        aimValue.setText(
-                String.format(
-                        Locale.US,
-                        "Manual aim profile: %d%% • Stability bias: %d%%",
-                        value,
-                        stability
-                )
-        );
-    }
-
-    private void applyNetworkProfile(int value) {
-        int timeout = Math.max(400, 1800 - value * 12);
-        dnsValue.setText(
-                String.format(
-                        Locale.US,
-                        "Network profile: %d%% • DNS probe timeout: %d ms • Session lock: ON",
-                        value,
-                        timeout
-                )
-        );
-    }
-
-    private void refreshGameState() {
-        Intent game = findGame();
-
-        if (game == null) {
-            gameValue.setText("Free Fire: نصب نیست یا از این دستگاه قابل تشخیص نیست.");
+            openDisplaySettings();
             return;
         }
 
-        String mode = "نامشخص";
+        selectedRefresh = hz;
+
+        if (Build.VERSION.SDK_INT >= 23 && !Settings.System.canWrite(this)) {
+            openWriteSettings();
+            actionValue.setText("برای تغییر واقعی refresh سیستم، اجازهٔ WRITE_SETTINGS لازم است.");
+            return;
+        }
+
+        boolean success = true;
+
+        try {
+            saveOriginalRefreshValuesIfNeeded();
+            success &= Settings.System.putString(
+                    getContentResolver(),
+                    KEY_PEAK_REFRESH,
+                    String.format(Locale.US, "%.1f", hz)
+            );
+            success &= Settings.System.putString(
+                    getContentResolver(),
+                    KEY_MIN_REFRESH,
+                    String.format(Locale.US, "%.1f", hz)
+            );
+        } catch (SecurityException error) {
+            success = false;
+        }
+
+        applyOwnWindowRefresh(hz);
+
+        if (success) {
+            actionValue.setText(
+                    String.format(
+                            Locale.US,
+                            "System refresh target set to %.0f Hz.",
+                            hz
+                    )
+            );
+            Toast.makeText(
+                    this,
+                    String.format(Locale.US, "Refresh target: %.0f Hz", hz),
+                    Toast.LENGTH_SHORT
+            ).show();
+        } else {
+            actionValue.setText("سیستم اجازهٔ تغییر مستقیم refresh را نداد؛ Display Settings باز می‌شود.");
+            openDisplaySettings();
+        }
+
+        refreshSystemState();
+    }
+
+    private void applyOwnWindowRefresh(float hz) {
+        if (Build.VERSION.SDK_INT >= 21 && hz > 0f) {
+            WindowManager.LayoutParams lp = getWindow().getAttributes();
+            lp.preferredRefreshRate = hz;
+            getWindow().setAttributes(lp);
+        }
+    }
+
+    private void saveOriginalRefreshValuesIfNeeded() {
+        if (prefs.contains(PREF_OLD_PEAK) || prefs.contains(PREF_OLD_MIN)) {
+            return;
+        }
+
+        String peak = Settings.System.getString(getContentResolver(), KEY_PEAK_REFRESH);
+        String min = Settings.System.getString(getContentResolver(), KEY_MIN_REFRESH);
+
+        prefs.edit()
+                .putString(PREF_OLD_PEAK, peak == null ? "" : peak)
+                .putString(PREF_OLD_MIN, min == null ? "" : min)
+                .apply();
+    }
+
+    private void restoreRefreshSettings() {
+        if (Build.VERSION.SDK_INT >= 23 && !Settings.System.canWrite(this)) {
+            openWriteSettings();
+            actionValue.setText("برای Restore کردن refresh سیستم، اجازهٔ WRITE_SETTINGS لازم است.");
+            return;
+        }
+
+        String oldPeak = prefs.getString(PREF_OLD_PEAK, null);
+        String oldMin = prefs.getString(PREF_OLD_MIN, null);
+
+        if (!prefs.contains(PREF_OLD_PEAK) && !prefs.contains(PREF_OLD_MIN)) {
+            actionValue.setText("هنوز تغییری توسط T3R0ZA ذخیره نشده است.");
+            return;
+        }
+
+        try {
+            Settings.System.putString(
+                    getContentResolver(),
+                    KEY_PEAK_REFRESH,
+                    oldPeak == null || oldPeak.isEmpty() ? null : oldPeak
+            );
+            Settings.System.putString(
+                    getContentResolver(),
+                    KEY_MIN_REFRESH,
+                    oldMin == null || oldMin.isEmpty() ? null : oldMin
+            );
+        } catch (SecurityException error) {
+            actionValue.setText("Restore توسط سیستم رد شد.");
+            return;
+        }
+
+        prefs.edit().clear().apply();
+        selectedRefresh = currentRefresh();
+        actionValue.setText("Refresh settings به مقادیر قبلی برگردانده شد.");
+        refreshSystemState();
+    }
+
+    private void openWriteSettings() {
+        if (Build.VERSION.SDK_INT < 23) {
+            return;
+        }
+
+        Intent intent = new Intent(
+                Settings.ACTION_MANAGE_WRITE_SETTINGS,
+                Uri.parse("package:" + getPackageName())
+        );
+
+        try {
+            startActivity(intent);
+        } catch (Exception error) {
+            startActivity(new Intent(Settings.ACTION_SETTINGS));
+        }
+    }
+
+    private void openDisplaySettings() {
+        try {
+            startActivity(new Intent(Settings.ACTION_DISPLAY_SETTINGS));
+        } catch (Exception error) {
+            startActivity(new Intent(Settings.ACTION_SETTINGS));
+        }
+    }
+
+    private void openNetworkSettings() {
+        try {
+            startActivity(new Intent(Settings.ACTION_WIRELESS_SETTINGS));
+        } catch (Exception error) {
+            startActivity(new Intent(Settings.ACTION_SETTINGS));
+        }
+    }
+
+    private void openBatterySaverSettings() {
+        try {
+            startActivity(new Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS));
+        } catch (Exception error) {
+            startActivity(new Intent(Settings.ACTION_SETTINGS));
+        }
+    }
+
+    private void openGameSettings() {
+        String packageName = findGamePackage();
+
+        if (packageName == null) {
+            Toast.makeText(this, "Free Fire پیدا نشد.", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        Intent intent = new Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:" + packageName)
+        );
+
+        try {
+            startActivity(intent);
+        } catch (Exception error) {
+            startActivity(new Intent(Settings.ACTION_SETTINGS));
+        }
+    }
+
+    private String findGamePackage() {
+        String[] packages = {"com.dts.freefireth", "com.dts.freefiremax"};
+
+        for (String packageName : packages) {
+            if (getPackageManager().getLaunchIntentForPackage(packageName) != null) {
+                return packageName;
+            }
+        }
+
+        return null;
+    }
+
+    private void refreshGameState() {
+        String packageName = findGamePackage();
+
+        if (packageName == null) {
+            gameValue.setText("Free Fire: نصب نیست یا قابل تشخیص نیست.");
+            return;
+        }
+
+        String mode = "UNAVAILABLE";
+
         if (Build.VERSION.SDK_INT >= 31) {
-            GameManager manager = getSystemService(GameManager.class);
-            if (manager != null) {
-                int current = manager.getGameMode();
-                if (current == GameManager.GAME_MODE_PERFORMANCE) {
-                    mode = "PERFORMANCE";
-                } else if (current == GameManager.GAME_MODE_BATTERY) {
-                    mode = "BATTERY";
-                } else if (current == GameManager.GAME_MODE_STANDARD) {
-                    mode = "STANDARD";
-                } else if (current == GameManager.GAME_MODE_CUSTOM) {
-                    mode = "CUSTOM";
+            try {
+                GameManager manager = getSystemService(GameManager.class);
+                if (manager != null) {
+                    int current = manager.getGameMode();
+
+                    if (current == GameManager.GAME_MODE_PERFORMANCE) {
+                        mode = "PERFORMANCE";
+                    } else if (current == GameManager.GAME_MODE_BATTERY) {
+                        mode = "BATTERY";
+                    } else if (current == GameManager.GAME_MODE_STANDARD) {
+                        mode = "STANDARD";
+                    } else if (current == GameManager.GAME_MODE_CUSTOM) {
+                        mode = "CUSTOM";
+                    } else {
+                        mode = String.valueOf(current);
+                    }
                 }
+            } catch (SecurityException error) {
+                mode = "SYSTEM-RESTRICTED";
             }
         }
 
         gameValue.setText(
-                "Free Fire: پیدا شد • Game Mode گزارش‌شده توسط سیستم: " + mode
-                        + "\nT3R0ZA کنترل مستقیم Game Mode بازی دیگری را ادعا نمی‌کند."
+                "Detected package: " + packageName +
+                        "\nAndroid Game Mode report: " + mode +
+                        "\nGame settings are opened through Android settings."
         );
     }
 
-    private void refreshDeviceState() {
+    private void refreshThermalState() {
         Debug.MemoryInfo mem = new Debug.MemoryInfo();
         Debug.getMemoryInfo(mem);
 
@@ -403,6 +572,11 @@ public class MainActivity extends Activity {
 
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
         String saver = pm != null && pm.isPowerSaveMode() ? "ON" : "OFF";
+        String thermal = "UNKNOWN";
+
+        if (Build.VERSION.SDK_INT >= 29 && pm != null) {
+            thermal = thermalLabel(pm.getCurrentThermalStatus());
+        }
 
         Intent batteryIntent = registerReceiver(
                 null,
@@ -412,45 +586,38 @@ public class MainActivity extends Activity {
         int tempRaw = batteryIntent == null ? 0 :
                 batteryIntent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0);
 
-        ActivityManagerMemoryHolder memory = readSystemMemory();
-        deviceValue.setText(
+        ConnectivityManager cm =
+                (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+        String transport = "UNKNOWN";
+
+        if (cm != null && Build.VERSION.SDK_INT >= 23) {
+            Network network = cm.getActiveNetwork();
+            NetworkCapabilities caps = network == null
+                    ? null
+                    : cm.getNetworkCapabilities(network);
+
+            if (caps != null) {
+                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                    transport = "WIFI";
+                } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                    transport = "MOBILE";
+                } else {
+                    transport = "OTHER";
+                }
+            }
+        }
+
+        thermalValue.setText(
                 String.format(
                         Locale.US,
-                        "Panel RAM: %d MB\nSystem available RAM: %d MB\nBattery: %d%%\nTemperature: %.1f°C\nPower Saver: %s\nLow RAM device: %s",
-                        mem.getTotalPss() / 1024,
-                        memory.availableMb,
+                        "Thermal: %s\nBattery: %d%% • Power Saver: %s\nPanel RAM: %d MB\nTemperature: %.1f°C\nActive network: %s",
+                        thermal,
                         battery,
-                        tempRaw / 10f,
                         saver,
-                        memory.lowRam ? "YES" : "NO"
+                        mem.getTotalPss() / 1024,
+                        tempRaw / 10f,
+                        transport
                 )
-        );
-
-        if (Build.VERSION.SDK_INT >= 29 && pm != null) {
-            int thermal = pm.getCurrentThermalStatus();
-            thermalValue.setText(
-                    "Thermal status: " + thermalLabel(thermal) +
-                            "\nThermal guard: فعال"
-            );
-        } else {
-            thermalValue.setText("Thermal API: در این نسخه اندروید در دسترس نیست.");
-        }
-    }
-
-    private ActivityManagerMemoryHolder readSystemMemory() {
-        android.app.ActivityManager manager =
-                (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
-        android.app.ActivityManager.MemoryInfo info =
-                new android.app.ActivityManager.MemoryInfo();
-
-        if (manager == null) {
-            return new ActivityManagerMemoryHolder(0, false);
-        }
-
-        manager.getMemoryInfo(info);
-        return new ActivityManagerMemoryHolder(
-                info.availMem / (1024 * 1024),
-                manager.isLowRamDevice()
         );
     }
 
@@ -475,30 +642,13 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void openGameSettings() {
-        String[] packages = {"com.dts.freefireth", "com.dts.freefiremax"};
-
-        for (String packageName : packages) {
-            if (getPackageManager().getLaunchIntentForPackage(packageName) != null) {
-                Intent intent = new Intent(
-                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                        Uri.parse("package:" + packageName)
-                );
-                startActivity(intent);
-                return;
-            }
-        }
-
-        Toast.makeText(this, "Free Fire پیدا نشد.", Toast.LENGTH_LONG).show();
-    }
-
     private void runDnsTest() {
-        dnsValue.setText("در حال تست 3 DNS...");
+        networkValue.setText("در حال تست پاسخ واقعی DNS...");
 
         executor.execute(() -> {
+            StringBuilder out = new StringBuilder();
             String best = "-";
             long bestMs = Long.MAX_VALUE;
-            StringBuilder out = new StringBuilder();
 
             for (int i = 0; i < DNS_IPS.length; i++) {
                 long ms = dnsQuery(DNS_IPS[i]);
@@ -519,14 +669,12 @@ public class MainActivity extends Activity {
             }
 
             if (bestMs != Long.MAX_VALUE) {
-                out.append("Selected for this session: ")
-                        .append(best)
-                        .append("\nLOCKED until next launch");
+                out.append("Fastest measured: ").append(best);
             } else {
                 out.append("No DNS response.");
             }
 
-            dnsValue.post(() -> dnsValue.setText(out.toString()));
+            networkValue.post(() -> networkValue.setText(out.toString()));
         });
     }
 
@@ -548,7 +696,7 @@ public class MainActivity extends Activity {
         };
 
         try (DatagramSocket socket = new DatagramSocket()) {
-            socket.setSoTimeout(Math.max(400, 1800 - networkLevel * 12));
+            socket.setSoTimeout(1600);
 
             InetAddress address = InetAddress.getByName(server);
             DatagramPacket packet =
@@ -562,32 +710,16 @@ public class MainActivity extends Activity {
                     new DatagramPacket(buffer, buffer.length);
 
             socket.receive(response);
-
             return (System.nanoTime() - start) / 1_000_000;
         } catch (IOException error) {
             return -1;
         }
     }
 
-    private Intent findGame() {
-        String[] packages = {"com.dts.freefireth", "com.dts.freefiremax"};
-
-        for (String packageName : packages) {
-            Intent candidate =
-                    getPackageManager().getLaunchIntentForPackage(packageName);
-
-            if (candidate != null) {
-                return candidate;
-            }
-        }
-
-        return null;
-    }
-
     private void launchGame() {
-        Intent game = findGame();
+        String packageName = findGamePackage();
 
-        if (game == null) {
+        if (packageName == null) {
             Toast.makeText(
                     this,
                     "Free Fire روی دستگاه پیدا نشد.",
@@ -596,23 +728,35 @@ public class MainActivity extends Activity {
             return;
         }
 
-        game.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(game);
+        float max = maxSupportedRefresh();
+        float launchHz = Math.min(selectedRefresh, max);
+
+        if (Build.VERSION.SDK_INT >= 23 && Settings.System.canWrite(this)) {
+            applyRefresh(launchHz, false);
+        }
+
+        Intent intent = getPackageManager().getLaunchIntentForPackage(packageName);
+
+        if (intent == null) {
+            Toast.makeText(this, "لانچر Free Fire پیدا نشد.", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
+
+        actionValue.setText(
+                String.format(
+                        Locale.US,
+                        "Free Fire launched • refresh target requested: %.0f Hz",
+                        launchHz
+                )
+        );
     }
 
     @Override
     protected void onDestroy() {
         executor.shutdownNow();
         super.onDestroy();
-    }
-
-    private static class ActivityManagerMemoryHolder {
-        final long availableMb;
-        final boolean lowRam;
-
-        ActivityManagerMemoryHolder(long availableMb, boolean lowRam) {
-            this.availableMb = availableMb;
-            this.lowRam = lowRam;
-        }
     }
 }
