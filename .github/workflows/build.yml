@@ -28,5 +28,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: PANEL-T3R0ZA-v2
+          name: PANEL-T3R0ZA-v3
           path: app/build/outputs/apk/debug/app-debug.apk
