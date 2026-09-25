@@ -152,6 +152,7 @@ public class OverlayService extends Service {
         header.addView(title, new LinearLayout.LayoutParams(0, dp(42), 1));
 
         TextView expand = makeText("▣", 17, Color.WHITE);
+        expand.setTag("t3r0za_expand");
         expand.setGravity(Gravity.CENTER);
         header.addView(expand, new LinearLayout.LayoutParams(dp(42), dp(42)));
 
