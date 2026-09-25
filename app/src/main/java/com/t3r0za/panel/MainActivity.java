@@ -29,14 +29,6 @@ public class MainActivity extends Activity {
         return t;
     }
 
-    private Button button(String s) {
-        Button b = new Button(this);
-        b.setText(s);
-        b.setTextColor(Color.WHITE);
-        b.setAllCaps(false);
-        return b;
-    }
-
     private void buildMini() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -51,7 +43,10 @@ public class MainActivity extends Activity {
         sub.setTextColor(Color.rgb(139,151,173));
         root.addView(sub, new LinearLayout.LayoutParams(-1, dp(32)));
 
-        Button launch = button("🎮 لانچ گیم");
+        Button launch = new Button(this);
+        launch.setText("🎮 لانچ گیم");
+        launch.setTextColor(Color.WHITE);
+        launch.setAllCaps(false);
         root.addView(launch, new LinearLayout.LayoutParams(-1, dp(54)));
 
         TextView status = label("● بازی: خاموش", 13);
@@ -87,7 +82,6 @@ public class MainActivity extends Activity {
 
         status.setText("● بازی: فعال");
         startForegroundService(new Intent(this, OverlayService.class));
-        game.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(game);
     }
 }
