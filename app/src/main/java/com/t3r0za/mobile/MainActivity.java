@@ -138,6 +138,9 @@ public class MainActivity extends Activity {
         startTelemetry();
         startFrameMeter();
         ensureMiniPanelOnStartup();
+        if(Settings.canDrawOverlays(this)){
+            handler.postDelayed(()->moveTaskToBack(true),250L);
+        }
     }
 
     void loadCorePreferences(){
