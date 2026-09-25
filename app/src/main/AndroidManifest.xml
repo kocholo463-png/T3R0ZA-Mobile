@@ -27,14 +27,6 @@
             </intent-filter>
         </activity>
 
-        <service
-            android:name=".OverlayService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="floating game performance panel" />
-        </service>
 
         <service
             android:name=".MiniPanelService"
