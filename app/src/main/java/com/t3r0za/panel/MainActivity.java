@@ -7,7 +7,6 @@ import android.graphics.Color;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
-import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -144,25 +143,17 @@ public class MainActivity extends Activity {
         addRateButton(rateRow, "RESTORE", 0f);
         fps.addView(rateRow, full(dp(52)));
 
-        Button displaySettings = actionButton("⚙  Open Display Settings");
-        displaySettings.setOnClickListener(v -> openDisplaySettings());
-        fps.addView(displaySettings, full(dp(46)));
-
         fps.addView(text(
-                "120 Hz فقط وقتی دستگاه و سیستم آن را پشتیبانی کنند اعمال می‌شود. در صورت داشتن دسترسی WRITE_SETTINGS، مقدار refresh سیستم تغییر می‌کند؛ وگرنه صفحه مجوز سیستم باز می‌شود.",
+                "فقط Refresh Rate انتخابی اجرا می‌شود. هیچ صفحه Settings باز نمی‌شود و هیچ تنظیم دیگری دستکاری نمی‌شود.",
                 10,
                 Color.rgb(140, 152, 174)
-        ), full(dp(64)));
+        ), full(dp(56)));
         root.addView(fps);
 
         LinearLayout game = card();
         game.addView(sectionTitle("FREE FIRE"));
         gameValue = text("", 12, Color.WHITE);
         game.addView(gameValue, full(dp(70)));
-
-        Button gameSettings = actionButton("⚙  Free Fire App Settings");
-        gameSettings.setOnClickListener(v -> openGameSettings());
-        game.addView(gameSettings, full(dp(46)));
 
         Button launch = actionButton("🎮  APPLY + LAUNCH FREE FIRE");
         launch.setOnClickListener(v -> launchGame());
@@ -184,15 +175,11 @@ public class MainActivity extends Activity {
         dnsTest.setOnClickListener(v -> runDnsTest());
         network.addView(dnsTest, full(dp(46)));
 
-        Button networkSettings = actionButton("⚙  Open Network Settings");
-        networkSettings.setOnClickListener(v -> openNetworkSettings());
-        network.addView(networkSettings, full(dp(46)));
-
         network.addView(text(
-                "تست DNS یک اندازه‌گیری واقعی از پاسخ سرور است. خود Android اجازهٔ تغییر Private DNS سراسری را به یک اپ عادی بدون مجوز سیستمی نمی‌دهد، بنابراین این بخش مقدار ساختگی نمایش نمی‌دهد.",
+                "DNS فقط latency واقعی را اندازه‌گیری می‌کند و هیچ تنظیم شبکه‌ای را تغییر نمی‌دهد.",
                 10,
                 Color.rgb(140, 152, 174)
-        ), full(dp(72)));
+        ), full(dp(60)));
         root.addView(network);
 
         LinearLayout thermal = card();
@@ -200,15 +187,11 @@ public class MainActivity extends Activity {
         thermalValue = text("", 12, Color.WHITE);
         thermal.addView(thermalValue, full(dp(82)));
 
-        Button batterySettings = actionButton("🔋  Battery Saver Settings");
-        batterySettings.setOnClickListener(v -> openBatterySaverSettings());
-        thermal.addView(batterySettings, full(dp(46)));
-
         thermal.addView(text(
-                "این بخش وضعیت واقعی حرارت و Power Saver را می‌خواند. خاموش‌کردن Power Saver از داخل اپ عادی به‌صورت بی‌صدا مجاز نیست؛ صفحهٔ رسمی سیستم باز می‌شود.",
+                "این بخش فقط وضعیت واقعی حرارت و Power Saver را می‌خواند و چیزی را تغییر نمی‌دهد.",
                 10,
                 Color.rgb(140, 152, 174)
-        ), full(dp(64)));
+        ), full(dp(56)));
         root.addView(thermal);
 
         LinearLayout diagnostics = card();
@@ -357,7 +340,7 @@ public class MainActivity extends Activity {
         );
     }
 
-    private void applyRefresh(float requestedHz, boolean showMessage) {
+    private void applyRefresh(float requestedHz) {
         float max = maxSupportedRefresh();
         float hz = requestedHz;
 
@@ -369,22 +352,14 @@ public class MainActivity extends Activity {
                             max
                     )
             );
-            if (showMessage) {
-                Toast.makeText(
-                        this,
-                        String.format(Locale.US, "Maximum supported refresh: %.0f Hz", max),
-                        Toast.LENGTH_LONG
-                ).show();
-            }
-            openDisplaySettings();
             return;
         }
 
         selectedRefresh = hz;
 
         if (Build.VERSION.SDK_INT >= 23 && !Settings.System.canWrite(this)) {
-            openWriteSettings();
-            actionValue.setText("برای تغییر واقعی refresh سیستم، اجازهٔ WRITE_SETTINGS لازم است.");
+            actionValue.setText("WRITE_SETTINGS داده نشده؛ هیچ تنظیم سیستمی تغییر نکرد.");
+            applyOwnWindowRefresh(hz);
             return;
         }
 
@@ -422,8 +397,7 @@ public class MainActivity extends Activity {
                     Toast.LENGTH_SHORT
             ).show();
         } else {
-            actionValue.setText("سیستم اجازهٔ تغییر مستقیم refresh را نداد؛ Display Settings باز می‌شود.");
-            openDisplaySettings();
+            actionValue.setText("سیستم تغییر Refresh را نپذیرفت؛ هیچ تنظیم دیگری دستکاری نشد.");
         }
 
         refreshSystemState();
@@ -463,8 +437,7 @@ public class MainActivity extends Activity {
 
     private void restoreRefreshSettings() {
         if (Build.VERSION.SDK_INT >= 23 && !Settings.System.canWrite(this)) {
-            openWriteSettings();
-            actionValue.setText("برای Restore کردن refresh سیستم، اجازهٔ WRITE_SETTINGS لازم است.");
+            actionValue.setText("Restore ممکن نیست چون WRITE_SETTINGS داده نشده.");
             return;
         }
 
@@ -503,70 +476,6 @@ public class MainActivity extends Activity {
         refreshSystemState();
     }
 
-    private void openWriteSettings() {
-        if (Build.VERSION.SDK_INT < 23) {
-            return;
-        }
-
-        Intent intent = new Intent(
-                Settings.ACTION_MANAGE_WRITE_SETTINGS,
-                Uri.parse("package:" + getPackageName())
-        );
-
-        try {
-            startActivity(intent);
-        } catch (Throwable error) {
-            try {
-                startActivity(new Intent(Settings.ACTION_SETTINGS));
-            } catch (Throwable ignored) {
-            }
-        }
-    }
-
-    private void openDisplaySettings() {
-        try {
-            startActivity(new Intent(Settings.ACTION_DISPLAY_SETTINGS));
-        } catch (Exception error) {
-            startActivity(new Intent(Settings.ACTION_SETTINGS));
-        }
-    }
-
-    private void openNetworkSettings() {
-        try {
-            startActivity(new Intent(Settings.ACTION_WIRELESS_SETTINGS));
-        } catch (Exception error) {
-            startActivity(new Intent(Settings.ACTION_SETTINGS));
-        }
-    }
-
-    private void openBatterySaverSettings() {
-        try {
-            startActivity(new Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS));
-        } catch (Exception error) {
-            startActivity(new Intent(Settings.ACTION_SETTINGS));
-        }
-    }
-
-    private void openGameSettings() {
-        String packageName = findGamePackage();
-
-        if (packageName == null) {
-            Toast.makeText(this, "Free Fire پیدا نشد.", Toast.LENGTH_LONG).show();
-            return;
-        }
-
-        Intent intent = new Intent(
-                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                Uri.parse("package:" + packageName)
-        );
-
-        try {
-            startActivity(intent);
-        } catch (Exception error) {
-            startActivity(new Intent(Settings.ACTION_SETTINGS));
-        }
-    }
-
     private String findGamePackage() {
         String[] packages = {"com.dts.freefireth", "com.dts.freefiremax"};
 
@@ -588,9 +497,9 @@ public class MainActivity extends Activity {
         }
 
         gameValue.setText(
-                "Detected package: " + packageName +
-                        "\nDirect game controls: Android does not expose them to a normal companion app." +
-                        "\nFree Fire App Settings: available below."
+                "Detected: " + packageName +
+                        "\nLaunch: READY" +
+                        "\nGame input/files remain untouched."
         );
     }
 
@@ -763,8 +672,11 @@ public class MainActivity extends Activity {
         float max = maxSupportedRefresh();
         float launchHz = Math.min(selectedRefresh, max);
 
-        if (Build.VERSION.SDK_INT >= 23 && Settings.System.canWrite(this)) {
-            applyRefresh(launchHz, false);
+        if (Build.VERSION.SDK_INT < 23 || Settings.System.canWrite(this)) {
+            applyRefresh(launchHz);
+        } else {
+            applyOwnWindowRefresh(launchHz);
+            actionValue.setText("Free Fire launch آماده است؛ Refresh سیستم تغییر نکرد چون Write Settings داده نشده.");
         }
 
         Intent intent = getPackageManager().getLaunchIntentForPackage(packageName);
