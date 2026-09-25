@@ -5,6 +5,8 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.app.usage.UsageEvents;
+import android.app.usage.UsageStatsManager;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
@@ -20,41 +22,95 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.graphics.drawable.GradientDrawable;
 
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+
 public class MiniPanelService extends Service {
     static final int NOTIF_ID=9201;
     static final String CHANNEL="t3r0za_panel";
-    static final int DEFAULT_DNS_FAIL_LIMIT=3;
+    final Handler handler=new Handler();
+    final Set<String> games=new HashSet<>(Arrays.asList(
+        "com.dts.freefireth",
+        "com.dts.freefiremax"
+    ));
+
     WindowManager wm;
-    View panel;
+    LinearLayout panel;
     View hiddenBubble;
+    WindowManager.LayoutParams panelParams;
     boolean attached=false;
     boolean hidden=false;
-    boolean dnsOn=false;
-    Handler handler=new Handler();
-    Runnable stateTicker;
+    boolean expanded=false;
+    boolean launchedGame=false;
+
+    TextView gameState;
+    TextView overallState;
+    TextView fpsState;
+    TextView refreshState;
+    TextView thermalState;
+    TextView ramState;
+    TextView touchState;
+    TextView dnsState;
+    TextView sessionState;
+    TextView sensitivityState;
+    Runnable ticker;
 
     int dp(float v){
         return (int)(v*getResources().getDisplayMetrics().density+0.5f);
+    }
+
+    GradientDrawable bg(int color,float radius){
+        GradientDrawable g=new GradientDrawable();
+        g.setColor(color);
+        g.setCornerRadius(dp(radius));
+        return g;
+    }
+
+    TextView tv(String value,float size){
+        TextView t=new TextView(this);
+        t.setText(value);
+        t.setTextSize(size);
+        t.setTextColor(Color.WHITE);
+        t.setGravity(Gravity.CENTER_VERTICAL);
+        return t;
+    }
+
+    Button btn(String value){
+        Button b=new Button(this);
+        b.setText(value);
+        b.setTextSize(10);
+        b.setTextColor(Color.WHITE);
+        b.setAllCaps(false);
+        b.setMinWidth(0);
+        b.setMinHeight(0);
+        b.setPadding(dp(5),0,dp(5),0);
+        b.setBackground(bg(Color.rgb(20,38,47),12));
+        return b;
     }
 
     @Override public void onCreate(){
         super.onCreate();
         createChannel();
         startForegroundNow();
-        showPanel();
+        showCompact();
     }
 
     void createChannel(){
         if(Build.VERSION.SDK_INT>=26){
             NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
-            NotificationChannel c=new NotificationChannel(CHANNEL,"T3R0ZA Mini Panel",NotificationManager.IMPORTANCE_LOW);
-            c.setDescription("T3R0ZA in-game quick controls");
-            nm.createNotificationChannel(c);
+            if(nm!=null){
+                NotificationChannel c=new NotificationChannel(
+                    CHANNEL,"T3R0ZA Mini Panel",NotificationManager.IMPORTANCE_LOW);
+                c.setDescription("T3R0ZA in-game performance controls");
+                nm.createNotificationChannel(c);
+            }
         }
     }
 
@@ -67,241 +123,223 @@ public class MiniPanelService extends Service {
         if(Build.VERSION.SDK_INT>=23) flags|=PendingIntent.FLAG_IMMUTABLE;
         PendingIntent pi=PendingIntent.getActivity(this,9202,open,flags);
         b.setSmallIcon(android.R.drawable.ic_menu_manage)
-         .setContentTitle("T3R0ZA MINI PANEL")
-         .setContentText("پنل کوچک T3R0ZA در بازی فعال است")
-         .setOngoing(true)
-         .setContentIntent(pi);
+            .setContentTitle("T3R0ZA MINI PANEL")
+            .setContentText("کنترل عملکرد بازی")
+            .setOngoing(true)
+            .setContentIntent(pi);
         startForeground(NOTIF_ID,b.build());
     }
 
-    GradientDrawable panelBackground(){
-        GradientDrawable g=new GradientDrawable();
-        g.setColor(Color.argb(242,10,20,27));
-        g.setCornerRadius(dp(18));
-        g.setStroke(dp(1),Color.argb(150,39,215,165));
-        return g;
+    void showCompact(){
+        expanded=false;
+        if(!preparePanel()) return;
+
+        panel.removeAllViews();
+
+        LinearLayout header=new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView title=tv("T3R0ZA  ⚡",14);
+        title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        title.setTextColor(Color.rgb(39,215,165));
+        header.addView(title,new LinearLayout.LayoutParams(0,dp(34),1));
+
+        gameState=tv("● GAME: OFF",9);
+        gameState.setTextColor(Color.rgb(139,157,169));
+        header.addView(gameState,new LinearLayout.LayoutParams(dp(82),dp(34)));
+
+        Button hide=btn("−");
+        hide.setOnClickListener(v->hidePanel());
+        header.addView(hide,new LinearLayout.LayoutParams(dp(38),dp(34)));
+
+        panel.addView(header);
+        installDrag(title);
+
+        overallState=tv("● READY",9);
+        overallState.setTextColor(Color.rgb(86,183,255));
+        panel.addView(overallState,new LinearLayout.LayoutParams(-1,dp(22)));
+
+        Button launch=btn("🎮 LAUNCH GAME");
+        launch.setTextSize(12);
+        launch.setTextColor(Color.rgb(39,215,165));
+        launch.setOnClickListener(v->launchGame());
+        panel.addView(launch,new LinearLayout.LayoutParams(-1,dp(42)));
+
+        TextView hint=tv("Free Fire اجرا شود تا کنترل‌های کامل باز شوند.",8);
+        hint.setTextColor(Color.rgb(139,157,169));
+        panel.addView(hint);
+
+        updateWindowSize(dp(300),dp(176));
+        updateLiveState();
+        ensureTicker();
     }
 
-    GradientDrawable buttonBackground(){
-        GradientDrawable g=new GradientDrawable();
-        g.setColor(Color.argb(215,20,38,47));
-        g.setCornerRadius(dp(12));
-        return g;
-    }
-
-    void showPanel(){
+    boolean preparePanel(){
         if(!Settings.canDrawOverlays(this)){
             stopSelf();
-            return;
+            return false;
         }
 
-        wm=(WindowManager)getSystemService(WINDOW_SERVICE);
-
-        LinearLayout box=new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(10),dp(8),dp(10),dp(9));
-        box.setBackground(panelBackground());
-
-        LinearLayout top=new LinearLayout(this);
-        top.setGravity(Gravity.CENTER_VERTICAL);
-
-        TextView title=new TextView(this);
-        title.setText("T3R0ZA\nپنل بازی");
-        title.setTextColor(Color.rgb(39,215,165));
-        title.setTextSize(14);
-        title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
-        top.addView(title,new LinearLayout.LayoutParams(0,dp(34),1));
-
-        TextView live=new TextView(this);
-        live.setText("●");
-        live.setTextColor(Color.rgb(39,215,165));
-        live.setTextSize(12);
-        top.addView(live,new LinearLayout.LayoutParams(dp(24),dp(34)));
-
-        Button panelBtn=smallButton("PANEL\nپنل اصلی");
-        panelBtn.setOnClickListener(v->openPanel());
-        top.addView(panelBtn,new LinearLayout.LayoutParams(dp(62),dp(34)));
-
-        Button hide=smallButton("HIDE\nمخفی");
-        hide.setOnClickListener(v->hidePanel());
-        top.addView(hide,new LinearLayout.LayoutParams(dp(58),dp(34)));
-
-        Button stop=smallButton("×");
-        stop.setOnClickListener(v->stopSelf());
-        top.addView(stop,new LinearLayout.LayoutParams(dp(38),dp(34)));
-
-        box.addView(top);
-
-        TextView state=miniText("LIVE CONTROL CORE\nکنترل زنده اصلی");
-        box.addView(state);
-
-        LinearLayout quick=new LinearLayout(this);
-        quick.setOrientation(LinearLayout.HORIZONTAL);
-
-        Button boost=smallButton("BOOST\nتقویت");
-        boost.setTextColor(Color.rgb(39,215,165));
-        boost.setOnClickListener(v->MainActivity.quickBoostFromMini());
-        quick.addView(boost,new LinearLayout.LayoutParams(0,dp(42),1));
-
-        Button noDns=smallButton("NO DNS\nبدون DNS");
-        noDns.setOnClickListener(v->MainActivity.noDnsFromMini());
-        quick.addView(noDns,new LinearLayout.LayoutParams(0,dp(42),1));
-
-        Button refresh=smallButton("MAX HZ\nبیشترین Hz");
-        refresh.setOnClickListener(v->MainActivity.refreshFromMini());
-        quick.addView(refresh,new LinearLayout.LayoutParams(0,dp(42),1));
-
-        box.addView(quick);
-
-        LinearLayout quick2=new LinearLayout(this);
-        quick2.setOrientation(LinearLayout.HORIZONTAL);
-
-        Button touch=smallButton("TOUCH\nپاسخ لمس");
-        touch.setOnClickListener(v->MainActivity.touchLabFromMini());
-        quick2.addView(touch,new LinearLayout.LayoutParams(0,dp(38),1));
-
-        Button scan=smallButton("SCAN\nاسکن");
-        scan.setOnClickListener(v->openPanel());
-        quick2.addView(scan,new LinearLayout.LayoutParams(0,dp(38),1));
-
-        box.addView(quick2);
-        TextView telemetry=miniText("REFRESH -- Hz  •  THERMAL --\nنرخ نوسازی و دما");
-        telemetry.setTextColor(Color.rgb(86,183,255));
-        box.addView(telemetry);
-
-        Button dns=smallButton("DNS\nدی‌ان‌اس");
-        dns.setTextColor(Color.rgb(39,215,165));
-        dns.setOnClickListener(v->toggleDns(dns,state));
-        box.addView(dns,new LinearLayout.LayoutParams(-1,dp(38)));
-
-        addMiniSwitch(box,"AUTO PERFORMANCE\nعملکرد خودکار", "autoPerformance", true, state);
-        addMiniSwitch(box,"GAME PERFORMANCE\nعملکرد بازی", "performanceSession", false, state);
-        addMiniSwitch(box,"LIVE INPUT\nپایش لمس", "liveInput", false, state);
-        addMiniSwitch(box,"STABLE DNS\nDNS پایدار", "stableDns", false, state);
-        addMiniSwitch(box,"THERMAL GUARD\nمحافظ حرارتی", "thermalGuard", true, state);
-
-        TextView guardLabel=miniText("DNS GUARD  3 FAIL\nمحافظ DNS، ۳ خطا");
-        guardLabel.setTextColor(Color.rgb(86,183,255));
-        box.addView(guardLabel,new LinearLayout.LayoutParams(-1,dp(26)));
-
-        SeekBar guard=new SeekBar(this);
-        guard.setMax(4);
-        int saved=getSharedPreferences("t3r0za",MODE_PRIVATE).getInt("dns_fail_limit",DEFAULT_DNS_FAIL_LIMIT);
-        int progress=Math.max(0,Math.min(4,saved-1));
-        guard.setProgress(progress);
-        guard.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
-            public void onProgressChanged(SeekBar b,int p,boolean fromUser){
-                int limit=p+1;
-                guardLabel.setText("DNS GUARD  "+limit+" FAIL\nمحافظ DNS، "+limit+" خطا");
-                if(fromUser){
-                    getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putInt("dns_fail_limit",limit).apply();
-                    state.setText("● DNS GUARD: "+limit+" خطای پیاپی");
-                }
-            }
-            public void onStartTrackingTouch(SeekBar b){}
-            public void onStopTrackingTouch(SeekBar b){}
-        });
-        box.addView(guard,new LinearLayout.LayoutParams(-1,dp(32)));
-
-        TextView note=miniText("BOOST، REFRESH و NO-DNS فقط تنظیمات مجاز Android هستند؛ بدون auto-aim یا تغییر فایل بازی.");
-        note.setTextColor(Color.rgb(139,157,169));
-        box.addView(note);
-
-        panel=box;
-
-        int type=Build.VERSION.SDK_INT>=26
-            ?WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            :WindowManager.LayoutParams.TYPE_PHONE;
-
-        WindowManager.LayoutParams p=new WindowManager.LayoutParams(
-            dp(280),
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            type,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                |WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT);
-
-        p.gravity=Gravity.TOP|Gravity.END;
-        p.x=dp(8);
-        p.y=dp(86);
-
-        title.setOnTouchListener(new View.OnTouchListener(){
-            float downX,downY;
-            int startX,startY;
-            public boolean onTouch(View v,MotionEvent e){
-                if(e.getActionMasked()==MotionEvent.ACTION_DOWN){
-                    downX=e.getRawX();
-                    downY=e.getRawY();
-                    startX=p.x;
-                    startY=p.y;
-                    return true;
-                }
-                if(e.getActionMasked()==MotionEvent.ACTION_MOVE){
-                    p.x=startX+(int)(downX-e.getRawX());
-                    p.y=startY+(int)(e.getRawY()-downY);
-                    try{wm.updateViewLayout(box,p);}catch(Exception ignored){}
-                    return true;
-                }
-                return true;
-            }
-        });
-
-        try{
-            wm.addView(box,p);
-            attached=true;
-            stateTicker=()->{
-                boolean active=DnsTunnelService.instance!=null;
-                dnsOn=active;
-                dns.setText(active?"DNS ✓\nمتصل":"DNS\nدی‌ان‌اس");
-                live.setText(active?"●":"○");
-                live.setTextColor(active?Color.rgb(39,215,165):Color.rgb(139,157,169));
-
-                try{
-                    android.view.Display display=getSystemService(WINDOW_SERVICE)!=null
-                        ?((WindowManager)getSystemService(WINDOW_SERVICE)).getDefaultDisplay():null;
-                    float hz=display==null?0f:display.getRefreshRate();
-                    android.os.PowerManager pm=(android.os.PowerManager)getSystemService(POWER_SERVICE);
-                    String thermal="N/A";
-                    if(pm!=null && Build.VERSION.SDK_INT>=29){
-                        int th=pm.getCurrentThermalStatus();
-                        thermal=th<=android.os.PowerManager.THERMAL_STATUS_LIGHT?"NORMAL":
-                            th==android.os.PowerManager.THERMAL_STATUS_MODERATE?"MODERATE":
-                            th==android.os.PowerManager.THERMAL_STATUS_SEVERE?"SEVERE":
-                            th==android.os.PowerManager.THERMAL_STATUS_CRITICAL?"CRITICAL":"EMERGENCY";
-                    }
-                    android.app.ActivityManager am=(android.app.ActivityManager)getSystemService(ACTIVITY_SERVICE);
-                    android.app.ActivityManager.MemoryInfo mi=new android.app.ActivityManager.MemoryInfo();
-                    if(am!=null) am.getMemoryInfo(mi);
-                    long free=mi.availMem/1048576L;
-                    telemetry.setText("REFRESH "+String.format(java.util.Locale.US,"%.0f",hz)+" Hz  •  "+thermal+
-                        "\nنرخ نوسازی • دما • RAM آزاد "+free+" MB");
-                }catch(Exception ignored){}
-
-                if(attached){
-                    handler.postDelayed(stateTicker,1500);
-                }
-            };
-            handler.post(stateTicker);
-        }catch(Exception e){
-            stopSelf();
+        if(wm==null) wm=(WindowManager)getSystemService(WINDOW_SERVICE);
+        if(panel==null){
+            panel=new LinearLayout(this);
+            panel.setOrientation(LinearLayout.VERTICAL);
+            panel.setPadding(dp(10),dp(8),dp(10),dp(8));
+            panel.setBackground(bg(Color.argb(244,8,18,24),18));
         }
+        if(!attached){
+            int type=Build.VERSION.SDK_INT>=26
+                ?WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                :WindowManager.LayoutParams.TYPE_PHONE;
+
+            panelParams=new WindowManager.LayoutParams(
+                dp(300),dp(176),type,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT);
+            panelParams.gravity=Gravity.TOP|Gravity.END;
+            panelParams.x=dp(8);
+            panelParams.y=dp(86);
+            try{
+                wm.addView(panel,panelParams);
+                attached=true;
+            }catch(Exception e){
+                stopSelf();
+                return false;
+            }
+        }
+        return true;
     }
 
-    TextView miniText(String text){
-        TextView t=new TextView(this);
-        t.setText(text);
-        t.setTextColor(Color.WHITE);
-        t.setTextSize(9);
-        t.setPadding(0,dp(2),0,dp(2));
+    void showExpanded(){
+        expanded=true;
+        if(!preparePanel()) return;
+
+        panel.removeAllViews();
+
+        LinearLayout header=new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView title=tv("T3R0ZA  ⚡",14);
+        title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        title.setTextColor(Color.rgb(39,215,165));
+        header.addView(title,new LinearLayout.LayoutParams(0,dp(34),1));
+
+        gameState=tv("● GAME: OFF",9);
+        header.addView(gameState,new LinearLayout.LayoutParams(dp(82),dp(34)));
+
+        Button collapse=btn("−");
+        collapse.setOnClickListener(v->showCompact());
+        header.addView(collapse,new LinearLayout.LayoutParams(dp(38),dp(34)));
+
+        Button hide=btn("×");
+        hide.setOnClickListener(v->hidePanel());
+        header.addView(hide,new LinearLayout.LayoutParams(dp(38),dp(34)));
+
+        panel.addView(header);
+        installDrag(title);
+
+        overallState=tv("● ONLINE",9);
+        overallState.setTextColor(Color.rgb(39,215,165));
+        panel.addView(overallState,new LinearLayout.LayoutParams(-1,dp(22)));
+
+        ScrollView scroll=new ScrollView(this);
+        scroll.setFillViewport(false);
+        scroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+
+        LinearLayout body=new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(0,dp(2),0,dp(4));
+
+        addSection(body,"⚡ PERFORMANCE");
+        fpsState=addStatus(body,"FPS","— NOT SUPPORTED");
+        addStatus(body,"FRAME","● MONITOR");
+        refreshState=addStatus(body,"REFRESH",getRefreshState());
+        thermalState=addStatus(body,"THERMAL",getThermalState());
+        ramState=addStatus(body,"RAM",getRamState());
+
+        addSection(body,"👆 TOUCH / INPUT");
+        touchState=addStatus(body,"RESPONSE","— NOT SUPPORTED");
+        addStatus(body,"INPUT MODE","FAST PROFILE");
+        addStatus(body,"TOUCH STATUS","— GAME INPUT NOT EXPOSED");
+
+        addSection(body,"🎯 AIM / RECOIL");
+        addStatus(body,"RESPONSE","FAST PROFILE");
+        addStatus(body,"RECOIL HELP","MANUAL ONLY");
+        addStatus(body,"STABILITY","FRAME + TOUCH MONITOR");
+        addSensitivity(body);
+
+        addSection(body,"🌐 NETWORK");
+        addStatus(body,"PING","— NOT MEASURED");
+        addStatus(body,"JITTER","— NOT MEASURED");
+        addStatus(body,"LOSS","— NOT MEASURED");
+        dnsState=addStatus(body,"DNS","○ OFF");
+
+        Button dns=btn("DNS  ON / OFF");
+        dns.setOnClickListener(v->toggleDns());
+        body.addView(dns,new LinearLayout.LayoutParams(-1,dp(34)));
+
+        addSection(body,"🧠 SMART MODE");
+        addSwitch(body,"AUTO OPTIMIZE","autoPerformance",true);
+        sessionState=addStatus(body,"GAME SESSION",isGameForeground()?"● ACTIVE":"○ WAITING");
+
+        Button refresh=btn("MAX REFRESH REQUEST");
+        refresh.setOnClickListener(v->MainActivity.refreshFromMini());
+        body.addView(refresh,new LinearLayout.LayoutParams(-1,dp(34)));
+
+        Button touch=btn("TOUCH RESPONSE TEST");
+        touch.setOnClickListener(v->MainActivity.touchLabFromMini());
+        body.addView(touch,new LinearLayout.LayoutParams(-1,dp(34)));
+
+        Button open=btn("OPEN MAIN PANEL");
+        open.setOnClickListener(v->openPanel());
+        body.addView(open,new LinearLayout.LayoutParams(-1,dp(34)));
+
+        Button compact=btn("COMPACT MODE");
+        compact.setOnClickListener(v->showCompact());
+        body.addView(compact,new LinearLayout.LayoutParams(-1,dp(34)));
+
+        TextView note=tv(
+            "کمک به هدشات فقط به شکل دستی: پاسخ‌گویی، ثبات فریم، لمس و کنترل. " +
+            "بدون auto-aim، auto-shoot، تزریق یا تغییر فایل بازی.",8);
+        note.setTextColor(Color.rgb(139,157,169));
+        body.addView(note);
+
+        scroll.addView(body);
+        panel.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+
+        Button openFull=btn("↗ FULL CONTROLS");
+        openFull.setOnClickListener(v->openPanel());
+        panel.addView(openFull,new LinearLayout.LayoutParams(-1,dp(32)));
+
+        updateWindowSize(dp(318),dp(500));
+        updateLiveState();
+        ensureTicker();
+    }
+
+    void addSection(LinearLayout body,String value){
+        TextView t=tv(value,10);
+        t.setTextColor(Color.rgb(86,183,255));
+        t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        t.setPadding(0,dp(6),0,dp(3));
+        body.addView(t);
+    }
+
+    TextView addStatus(LinearLayout body,String name,String value){
+        TextView t=tv(name+"    "+value,9);
+        t.setTextColor(Color.rgb(239,245,248));
+        t.setPadding(0,dp(3),0,dp(3));
+        body.addView(t,new LinearLayout.LayoutParams(-1,dp(24)));
         return t;
     }
 
-    void addMiniSwitch(LinearLayout parent,String title,String key,boolean defaultValue,TextView state){
+    void addSwitch(LinearLayout body,String title,String key,boolean defaultValue){
         LinearLayout row=new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
 
-        TextView label=miniText(title);
-        row.addView(label,new LinearLayout.LayoutParams(0,dp(34),1));
+        TextView t=tv(title,9);
+        t.setTextColor(Color.rgb(239,245,248));
+        row.addView(t,new LinearLayout.LayoutParams(0,dp(34),1));
 
         boolean value=getSharedPreferences("t3r0za",MODE_PRIVATE).getBoolean(key,defaultValue);
         Switch sw=new Switch(this);
@@ -309,60 +347,225 @@ public class MiniPanelService extends Service {
         sw.setOnCheckedChangeListener((buttonView,isChecked)->{
             getSharedPreferences("t3r0za",MODE_PRIVATE).edit().putBoolean(key,isChecked).apply();
             MainActivity.applyMiniSwitch(key,isChecked);
+        });
+        row.addView(sw,new LinearLayout.LayoutParams(dp(58),dp(34)));
+        body.addView(row);
+    }
 
-            if("stableDns".equals(key)){
-                state.setText(isChecked?"● DNS SESSION ARMED\nنشست DNS آماده":"● DNS SESSION OFF\nنشست DNS خاموش");
-            }else if("autoPerformance".equals(key)){
-                state.setText(isChecked?"● PERFORMANCE CORE ON\nهسته عملکرد روشن":"● PERFORMANCE CORE OFF\nهسته عملکرد خاموش");
-            }else if("thermalGuard".equals(key)){
-                state.setText(isChecked?"● THERMAL GUARD ON\nمحافظ حرارتی روشن":"● THERMAL GUARD OFF\nمحافظ حرارتی خاموش");
-            }else if("liveInput".equals(key)){
-                state.setText(isChecked?"● INPUT MONITOR ON\nپایش لمس روشن":"● INPUT MONITOR OFF\nپایش لمس خاموش");
+    void addSensitivity(LinearLayout body){
+        sensitivityState=addStatus(body,"SENSITIVITY","50%");
+        SeekBar bar=new SeekBar(this);
+        bar.setMax(100);
+        bar.setProgress(getSharedPreferences("t3r0za",MODE_PRIVATE).getInt("aim_profile",50));
+        bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            public void onProgressChanged(SeekBar b,int value,boolean fromUser){
+                sensitivityState.setText("SENSITIVITY    "+value+"%  •  PROFILE ONLY");
+                if(fromUser){
+                    getSharedPreferences("t3r0za",MODE_PRIVATE)
+                        .edit().putInt("aim_profile",value).apply();
+                }
+            }
+            public void onStartTrackingTouch(SeekBar b){}
+            public void onStopTrackingTouch(SeekBar b){}
+        });
+        body.addView(bar,new LinearLayout.LayoutParams(-1,dp(32)));
+    }
+
+    String getRefreshState(){
+        try{
+            android.view.Display d=((WindowManager)getSystemService(WINDOW_SERVICE))
+                .getDefaultDisplay();
+            float hz=d==null?0f:d.getRefreshRate();
+            return hz>0?Math.round(hz)+" Hz":"— NOT SUPPORTED";
+        }catch(Exception e){
+            return "— NOT SUPPORTED";
+        }
+    }
+
+    String getThermalState(){
+        if(Build.VERSION.SDK_INT<29) return "— NOT SUPPORTED";
+        try{
+            android.os.PowerManager pm=(android.os.PowerManager)getSystemService(POWER_SERVICE);
+            if(pm==null) return "— NOT SUPPORTED";
+            int s=pm.getCurrentThermalStatus();
+            if(s<=android.os.PowerManager.THERMAL_STATUS_LIGHT) return "NORMAL";
+            if(s==android.os.PowerManager.THERMAL_STATUS_MODERATE) return "MODERATE";
+            if(s==android.os.PowerManager.THERMAL_STATUS_SEVERE) return "SEVERE";
+            if(s==android.os.PowerManager.THERMAL_STATUS_CRITICAL) return "CRITICAL";
+            return "EMERGENCY";
+        }catch(Exception e){
+            return "— NOT SUPPORTED";
+        }
+    }
+
+    String getRamState(){
+        try{
+            android.app.ActivityManager am=(android.app.ActivityManager)getSystemService(ACTIVITY_SERVICE);
+            if(am==null) return "— NOT SUPPORTED";
+            android.app.ActivityManager.MemoryInfo mi=new android.app.ActivityManager.MemoryInfo();
+            am.getMemoryInfo(mi);
+            return (mi.availMem/1048576L)+" MB FREE";
+        }catch(Exception e){
+            return "— NOT SUPPORTED";
+        }
+    }
+
+    boolean isGameForeground(){
+        if(Build.VERSION.SDK_INT<21) return false;
+        try{
+            android.app.AppOpsManager ops=(android.app.AppOpsManager)getSystemService(APP_OPS_SERVICE);
+            if(ops==null) return false;
+            int mode=Build.VERSION.SDK_INT>=29
+                ?ops.unsafeCheckOpNoThrow(
+                    android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
+                    android.os.Process.myUid(),getPackageName())
+                :ops.checkOpNoThrow(
+                    android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
+                    android.os.Process.myUid(),getPackageName());
+            if(mode!=android.app.AppOpsManager.MODE_ALLOWED) return false;
+
+            UsageStatsManager usm=(UsageStatsManager)getSystemService(USAGE_STATS_SERVICE);
+            if(usm==null) return false;
+            long end=System.currentTimeMillis();
+            UsageEvents events=usm.queryEvents(end-60000L,end);
+            UsageEvents.Event e=new UsageEvents.Event();
+            String last=null;
+            long lastTime=0L;
+            while(events.hasNextEvent()){
+                events.getNextEvent(e);
+                int type=e.getEventType();
+                if((type==UsageEvents.Event.MOVE_TO_FOREGROUND ||
+                    (Build.VERSION.SDK_INT>=29 && type==UsageEvents.Event.ACTIVITY_RESUMED)) &&
+                   e.getTimeStamp()>=lastTime){
+                    lastTime=e.getTimeStamp();
+                    last=e.getPackageName();
+                }
+            }
+            return last!=null && games.contains(last);
+        }catch(Exception e){
+            return false;
+        }
+    }
+
+    void updateWindowSize(int width,int height){
+        if(!attached || panelParams==null) return;
+        panelParams.width=width;
+        panelParams.height=height;
+        try{wm.updateViewLayout(panel,panelParams);}catch(Exception ignored){}
+    }
+
+    void installDrag(View handle){
+        if(handle==null || panelParams==null) return;
+        handle.setOnTouchListener(new View.OnTouchListener(){
+            float downX,downY;
+            int startX,startY;
+            boolean moved;
+            public boolean onTouch(View v,MotionEvent e){
+                switch(e.getActionMasked()){
+                    case MotionEvent.ACTION_DOWN:
+                        downX=e.getRawX();
+                        downY=e.getRawY();
+                        startX=panelParams.x;
+                        startY=panelParams.y;
+                        moved=false;
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        if(Math.abs(e.getRawX()-downX)>dp(6) ||
+                           Math.abs(e.getRawY()-downY)>dp(6)) moved=true;
+                        panelParams.x=startX+(int)(downX-e.getRawX());
+                        panelParams.y=startY+(int)(e.getRawY()-downY);
+                        try{wm.updateViewLayout(panel,panelParams);}catch(Exception ignored){}
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                        return moved;
+                    default:
+                        return true;
+                }
             }
         });
-        row.addView(sw,new LinearLayout.LayoutParams(dp(56),dp(34)));
-        parent.addView(row);
     }
 
-    Button smallButton(String text){
-        Button b=new Button(this);
-        b.setText(text);
-        b.setTextSize(10);
-        b.setTextColor(Color.WHITE);
-        b.setAllCaps(false);
-        b.setMinWidth(0);
-        b.setMinHeight(0);
-        b.setPadding(dp(4),0,dp(4),0);
-        b.setBackground(buttonBackground());
-        return b;
+    void ensureTicker(){
+        if(ticker==null){
+            ticker=()->{
+                if(attached && !hidden){
+                    updateLiveState();
+                    handler.postDelayed(ticker,1000L);
+                }
+            };
+        }
+        handler.removeCallbacks(ticker);
+        handler.post(ticker);
     }
 
-    void toggleDns(Button button,TextView state){
-        if(dnsOn || DnsTunnelService.instance!=null){
+    void updateLiveState(){
+        boolean game=isGameForeground();
+        if(gameState!=null){
+            gameState.setText(game?"● GAME: ON":"● GAME: OFF");
+            gameState.setTextColor(game?Color.rgb(39,215,165):Color.rgb(139,157,169));
+        }
+        if(overallState!=null){
+            overallState.setText(game?"● ONLINE":"● READY");
+            overallState.setTextColor(game?Color.rgb(39,215,165):Color.rgb(86,183,255));
+        }
+        if(refreshState!=null) refreshState.setText("REFRESH    "+getRefreshState());
+        if(thermalState!=null) thermalState.setText("THERMAL    "+getThermalState());
+        if(ramState!=null) ramState.setText("RAM       "+getRamState());
+        if(sessionState!=null) sessionState.setText("GAME SESSION    "+(game?"● ACTIVE":"○ WAITING"));
+
+        if(game && !launchedGame){
+            launchedGame=true;
+            if(!expanded) showExpanded();
+        }
+        if(!game) launchedGame=false;
+
+        boolean dns= DnsTunnelService.instance!=null;
+        if(dnsState!=null){
+            dnsState.setText("DNS       "+(dns?"● LOCKED":"○ OFF"));
+            dnsState.setTextColor(dns?Color.rgb(39,215,165):Color.rgb(139,157,169));
+        }
+    }
+
+    void launchGame(){
+        String[] packages={"com.dts.freefireth","com.dts.freefiremax"};
+        boolean found=false;
+        for(String pkg:packages){
+            try{
+                Intent i=getPackageManager().getLaunchIntentForPackage(pkg);
+                if(i!=null){
+                    found=true;
+                    startActivity(i);
+                    break;
+                }
+            }catch(Exception ignored){}
+        }
+        if(found){
+            overallState.setText("◐ LAUNCHING");
+            overallState.setTextColor(Color.rgb(255,181,71));
+        }else{
+            overallState.setText("— GAME NOT INSTALLED");
+            overallState.setTextColor(Color.rgb(255,104,104));
+        }
+    }
+
+    void toggleDns(){
+        if(DnsTunnelService.instance!=null){
             try{stopService(new Intent(this,DnsTunnelService.class));}catch(Exception ignored){}
-            dnsOn=false;
-            button.setText("DNS\nدی‌ان‌اس");
-            state.setText("● DNS SESSION OFF");
             return;
         }
 
-        boolean armed=getSharedPreferences("t3r0za",MODE_PRIVATE).getBoolean("stableDns",true);
-        String dns=getSharedPreferences("t3r0za",MODE_PRIVATE).getString("selected_dns",null);
+        boolean armed=getSharedPreferences("t3r0za",MODE_PRIVATE)
+            .getBoolean("stableDns",false);
+        String dns=getSharedPreferences("t3r0za",MODE_PRIVATE)
+            .getString("selected_dns",null);
 
-        if(!armed){
-            state.setText("● STABLE DNS OFF\nDNS پایدار خاموش");
-            return;
-        }
-
-        if(dns==null || dns.isEmpty()){
-            state.setText("● DNS نیاز به BENCHMARK دارد\nنیاز به اجرای تست DNS");
+        if(!armed || dns==null || dns.isEmpty()){
             openPanel();
             return;
         }
 
         Intent prep=VpnService.prepare(this);
         if(prep!=null){
-            state.setText("● VPN PERMISSION REQUIRED\nتأیید اتصال VPN لازم است");
             openPanel();
             return;
         }
@@ -370,13 +573,9 @@ public class MiniPanelService extends Service {
         Intent i=new Intent(this,DnsTunnelService.class);
         i.putExtra(DnsTunnelService.EXTRA_DNS,dns);
         try{
-            if(Build.VERSION.SDK_INT>=26) startForegroundService(i); else startService(i);
-            dnsOn=true;
-            button.setText("DNS ✓\nمتصل");
-            state.setText("● DNS CONNECTING\nدر حال اتصال DNS  "+dns);
-        }catch(Exception ignored){
-            state.setText("● DNS START FAILED\nشروع DNS ناموفق بود");
-        }
+            if(Build.VERSION.SDK_INT>=26) startForegroundService(i);
+            else startService(i);
+        }catch(Exception ignored){}
     }
 
     void openPanel(){
@@ -388,26 +587,18 @@ public class MiniPanelService extends Service {
     void hidePanel(){
         if(hidden) return;
         hidden=true;
-        if(stateTicker!=null) handler.removeCallbacks(stateTicker);
+        if(ticker!=null) handler.removeCallbacks(ticker);
         if(wm!=null && panel!=null && attached){
             try{wm.removeView(panel);}catch(Exception ignored){}
         }
         attached=false;
-        TextView bubble=new TextView(this);
-        bubble.setText("T3");
+
+        TextView bubble=tv("T3",11);
         bubble.setGravity(Gravity.CENTER);
-        bubble.setTextColor(Color.rgb(39,215,165));
-        bubble.setTextSize(11);
         bubble.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
-        bubble.setBackground(buttonBackground());
-        bubble.setOnClickListener(v->{
-            if(wm!=null && hiddenBubble!=null){
-                try{wm.removeView(hiddenBubble);}catch(Exception ignored){}
-            }
-            hiddenBubble=null;
-            hidden=false;
-            showPanel();
-        });
+        bubble.setTextColor(Color.rgb(39,215,165));
+        bubble.setBackground(bg(Color.rgb(20,38,47),15));
+        bubble.setOnClickListener(v->restorePanel());
         hiddenBubble=bubble;
 
         int type=Build.VERSION.SDK_INT>=26
@@ -415,23 +606,26 @@ public class MiniPanelService extends Service {
             :WindowManager.LayoutParams.TYPE_PHONE;
         WindowManager.LayoutParams p=new WindowManager.LayoutParams(
             dp(52),dp(52),type,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                |WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT);
         p.gravity=Gravity.TOP|Gravity.END;
         p.x=dp(8);
         p.y=dp(90);
-        try{
-            wm.addView(hiddenBubble,p);
-        }catch(Exception e){
-            hiddenBubble=null;
-            hidden=false;
-            stopSelf();
+        try{wm.addView(hiddenBubble,p);}catch(Exception e){stopSelf();}
+    }
+
+    void restorePanel(){
+        if(wm!=null && hiddenBubble!=null){
+            try{wm.removeView(hiddenBubble);}catch(Exception ignored){}
         }
+        hiddenBubble=null;
+        hidden=false;
+        showCompact();
     }
 
     @Override public void onDestroy(){
-        if(stateTicker!=null) handler.removeCallbacks(stateTicker);
+        if(ticker!=null) handler.removeCallbacks(ticker);
         if(wm!=null && panel!=null && attached){
             try{wm.removeView(panel);}catch(Exception ignored){}
         }
@@ -441,7 +635,6 @@ public class MiniPanelService extends Service {
         attached=false;
         panel=null;
         hiddenBubble=null;
-        hidden=false;
         super.onDestroy();
     }
 
