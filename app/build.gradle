@@ -1,25 +1,24 @@
 plugins {
-    id "com.android.application"
+    id 'com.android.application'
 }
 
 android {
-    namespace "com.t3r0za.mobile"
+    namespace 'com.t3r0za.panel'
     compileSdk 36
 
     defaultConfig {
-        applicationId "com.t3r0za.mobile"
+        applicationId 'com.t3r0za.panel'
         minSdk 26
         targetSdk 36
         versionCode 1
-        versionName "1.0"
+        versionName '1.0'
     }
 
     buildTypes {
-        debug {
-            minifyEnabled false
-        }
         release {
             minifyEnabled false
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }
