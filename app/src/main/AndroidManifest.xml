@@ -15,6 +15,7 @@
         android:icon="@drawable/ic_t3r0za"
         android:label="@string/app_name"
         android:resizeableActivity="false"
+        android:hardwareAccelerated="true"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
