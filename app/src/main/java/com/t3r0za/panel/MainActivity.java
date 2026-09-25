@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.widget.Button;
@@ -81,7 +82,13 @@ public class MainActivity extends Activity {
         }
 
         status.setText("● بازی: فعال");
-        startForegroundService(new Intent(this, OverlayService.class));
+        try {
+            Intent mini = new Intent(this, com.t3r0za.mobile.MiniPanelService.class);
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(mini); else startService(mini);
+        } catch (Exception e) {
+            Toast.makeText(this, "اجرای Mini Panel ناموفق بود.", Toast.LENGTH_LONG).show();
+            return;
+        }
         startActivity(game);
     }
 }
