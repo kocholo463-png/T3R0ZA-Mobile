@@ -246,7 +246,7 @@ public class MainActivity extends Activity {
                 restoreRefreshSettings();
             } else {
                 selectedRefresh = hz;
-                applyRefresh(hz, true);
+                applyRefresh(hz);
             }
         });
     }
