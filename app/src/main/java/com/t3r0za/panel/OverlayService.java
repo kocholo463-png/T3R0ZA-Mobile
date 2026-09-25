@@ -89,10 +89,10 @@ public class OverlayService extends Service {
         content.setOrientation(LinearLayout.VERTICAL);
 
         content.addView(text("⚡ عملکرد", 14));
-        content.addView(text("نرخ نوسازی: " + refreshRate() + " Hz\nپایش FPS بازی از API عمومی ممکن نیست؛ عدد ساختگی نمایش نمی‌دیم.", 12));
+        content.addView(text("نرخ نوسازی: " + refreshRate() + " Hz\nFPS بازی را بدون ابزار اختصاصی نمی‌شود صادقانه اندازه گرفت.", 12));
 
         content.addView(text("👆 تاچ و ورودی", 14));
-        content.addView(text("پاسخ ورودی: پایش\nتأخیر سخت‌افزار صفحه با اسلایدر قابل جعل نیست.", 12));
+        content.addView(text("پاسخ ورودی: پایش\nتأخیر سخت‌افزار صفحه قابل جعل یا صفر کردن نیست.", 12));
 
         content.addView(text("🎯 ایم و کنترل دستی", 14));
         content.addView(text("کنترل نشانه: دستی\nپاسخ ورودی: پایش\nAuto Aim / Auto Headshot: ندارد", 12));
@@ -104,7 +104,6 @@ public class OverlayService extends Service {
 
         content.addView(text("🌡️ وضعیت دستگاه", 14));
         content.addView(text(deviceStats(), 12));
-
         content.addView(text("🧠 هوشمند: فقط قابلیت‌های واقعی و مجاز", 13));
 
         scroll.addView(content);
@@ -125,10 +124,8 @@ public class OverlayService extends Service {
 
         panel = box;
         wm.addView(panel, params);
-        addDrag(handleView(head));
+        addDrag(head);
     }
-
-    private View handleView(View head) { return head; }
 
     private void addDrag(View handle) {
         handle.setOnTouchListener(new View.OnTouchListener() {
