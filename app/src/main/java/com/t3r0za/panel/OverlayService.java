@@ -8,10 +8,14 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Debug;
 import android.os.IBinder;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -40,7 +44,10 @@ public class OverlayService extends Service {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private TextView statsText;
     private TextView dnsText;
-    private boolean compactMode;
+    private TextView stateText;
+    private boolean compactMode = true;
+    private PowerManager powerManager;
+    private PowerManager.OnThermalStatusChangedListener thermalListener;
 
     private int dp(float value) {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
@@ -51,6 +58,7 @@ public class OverlayService extends Service {
         super.onCreate();
         createChannel();
         startPanelService();
+        initThermalMonitor();
         showPanel();
     }
 
@@ -91,7 +99,7 @@ public class OverlayService extends Service {
 
         return builder
                 .setContentTitle("PANEL T3R0ZA")
-                .setContentText("پنل شناور فعال است")
+                .setContentText("پنل شناور سبک فعال است")
                 .setSmallIcon(android.R.drawable.ic_menu_manage)
                 .setOngoing(true)
                 .build();
@@ -102,6 +110,7 @@ public class OverlayService extends Service {
         view.setText(value);
         view.setTextColor(color);
         view.setTextSize(size);
+        view.setGravity(Gravity.CENTER_VERTICAL);
         view.setPadding(dp(6), dp(4), dp(6), dp(4));
         return view;
     }
@@ -112,6 +121,9 @@ public class OverlayService extends Service {
         button.setTextColor(Color.WHITE);
         button.setTextSize(12);
         button.setAllCaps(false);
+        button.setMinHeight(0);
+        button.setMinWidth(0);
+        button.setPadding(dp(5), 0, dp(5), 0);
         button.setBackgroundResource(R.drawable.bg_button);
         return button;
     }
@@ -126,7 +138,7 @@ public class OverlayService extends Service {
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(10), dp(8), dp(10), dp(8));
+        box.setPadding(dp(8), dp(7), dp(8), dp(7));
         box.setBackgroundResource(R.drawable.bg_panel);
         box.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
 
@@ -134,23 +146,27 @@ public class OverlayService extends Service {
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setBackgroundResource(R.drawable.bg_card);
 
-        TextView title = makeText("⚡  T3R0ZA", 16, Color.rgb(99, 230, 255));
+        TextView title = makeText("⚡ T3R0ZA", 15, Color.rgb(99, 230, 255));
         title.setTypeface(null, 1);
         title.setGravity(Gravity.CENTER_VERTICAL);
         header.addView(title, new LinearLayout.LayoutParams(0, dp(42), 1));
 
-        TextView close = makeText("✕", 18, Color.rgb(255, 107, 122));
+        TextView expand = makeText("▣", 17, Color.WHITE);
+        expand.setGravity(Gravity.CENTER);
+        header.addView(expand, new LinearLayout.LayoutParams(dp(42), dp(42)));
+
+        TextView close = makeText("✕", 17, Color.rgb(255, 107, 122));
         close.setGravity(Gravity.CENTER);
         header.addView(close, new LinearLayout.LayoutParams(dp(42), dp(42)));
 
         box.addView(header, new LinearLayout.LayoutParams(-1, dp(44)));
 
-        TextView state = makeText(
-                "● آماده • پنل واقعی و سبک",
-                11,
+        stateText = makeText(
+                "● حالت سبک فعال • آماده بازی",
+                10,
                 Color.rgb(94, 227, 154)
         );
-        box.addView(state, new LinearLayout.LayoutParams(-1, dp(28)));
+        box.addView(stateText, new LinearLayout.LayoutParams(-1, dp(26)));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
@@ -163,105 +179,117 @@ public class OverlayService extends Service {
         actionRow.setGravity(Gravity.CENTER);
 
         Button refresh = makeButton("↻ بروزرسانی");
-        Button compact = makeButton("▣ فشرده");
-
-        actionRow.addView(compact, new LinearLayout.LayoutParams(0, dp(44), 1));
+        Button lightweight = makeButton("⚡ حالت سبک");
+        actionRow.addView(lightweight, new LinearLayout.LayoutParams(0, dp(42), 1));
 
         LinearLayout.LayoutParams refreshParams =
-                new LinearLayout.LayoutParams(0, dp(44), 1);
+                new LinearLayout.LayoutParams(0, dp(42), 1);
         refreshParams.leftMargin = dp(5);
         actionRow.addView(refresh, refreshParams);
-
         content.addView(actionRow);
-        content.addView(section("نمایشگر"));
 
-        TextView display = makeText(
-                displayStats(),
+        content.addView(section("عملکرد"));
+        TextView performanceInfo = makeText(
+                "پنل از انیمیشن و پردازش مداوم استفاده نمی‌کند.\n" +
+                "در حالت سبک فقط هدر کوچک روی بازی می‌ماند تا سربار خود پنل کم شود.",
                 12,
                 Color.WHITE
         );
+        performanceInfo.setBackgroundResource(R.drawable.bg_card);
+        content.addView(performanceInfo, marginParams(dp(82)));
+
+        content.addView(section("نمایشگر"));
+        TextView display = makeText(displayStats(), 12, Color.WHITE);
         display.setBackgroundResource(R.drawable.bg_card);
         content.addView(display, marginParams(dp(58)));
 
         content.addView(section("دستگاه"));
-
         statsText = makeText(deviceStats(), 12, Color.WHITE);
         statsText.setBackgroundResource(R.drawable.bg_card);
-        content.addView(statsText, marginParams(dp(74)));
+        content.addView(statsText, marginParams(dp(92)));
 
         content.addView(section("شبکه و DNS"));
-
-        dnsText = makeText("آماده تست DNS واقعی", 12, Color.WHITE);
+        dnsText = makeText("آماده تست واقعی DNS", 12, Color.WHITE);
         dnsText.setBackgroundResource(R.drawable.bg_card);
         content.addView(dnsText, marginParams(dp(70)));
 
         LinearLayout dnsRow = new LinearLayout(this);
-
         Button testDns = makeButton("تست 3 DNS");
         Button network = makeButton("وضعیت شبکه");
-
-        dnsRow.addView(testDns, new LinearLayout.LayoutParams(0, dp(44), 1));
+        dnsRow.addView(testDns, new LinearLayout.LayoutParams(0, dp(42), 1));
 
         LinearLayout.LayoutParams networkParams =
-                new LinearLayout.LayoutParams(0, dp(44), 1);
+                new LinearLayout.LayoutParams(0, dp(42), 1);
         networkParams.leftMargin = dp(5);
         dnsRow.addView(network, networkParams);
-
         content.addView(dnsRow);
-        content.addView(section("کنترل دستی"));
 
+        content.addView(section("کنترل دستی"));
         TextView aimInfo = makeText(
-                "🎯 نشانه و تاچ: دستی\n" +
-                "لرزش یا تأخیر نرم‌افزاری ساختگی اعمال نمی‌شود.\n" +
-                "Auto Aim / Auto Headshot / Recoil Automation: ندارد.",
+                "🎯 تاچ و هدف‌گیری کاملاً دستی است.\n" +
+                "این پنل ورودی بازی را تزریق یا خودکار نمی‌کند و Auto Aim / Auto Headshot ندارد.\n" +
+                "برای بهبود واقعی کنترل، تنظیمات حساسیت داخل خود بازی باید تنظیم شوند.",
                 12,
                 Color.WHITE
         );
         aimInfo.setBackgroundResource(R.drawable.bg_card);
-        content.addView(aimInfo, marginParams(dp(86)));
+        content.addView(aimInfo, marginParams(dp(102)));
 
-        content.addView(section("حالت پنل"));
-
-        TextView panelInfo = makeText(
-                "فشرده: هدر کوچک برای مزاحمت کمتر روی صفحه.\n" +
-                "عادی: اطلاعات کامل با اسکرول بالا و پایین.",
+        content.addView(section("حرارت"));
+        TextView thermalInfo = makeText(
+                thermalStatusText(),
                 12,
                 Color.WHITE
         );
-        panelInfo.setBackgroundResource(R.drawable.bg_card);
-        content.addView(panelInfo, marginParams(dp(70)));
+        thermalInfo.setBackgroundResource(R.drawable.bg_card);
+        content.addView(thermalInfo, marginParams(dp(56)));
 
-        content.addView(makeText(
-                "این پنل داده واقعی دستگاه و تست شبکه را نشان می‌دهد؛ FPS خود بازی را بدون API اختصاصی بازی جعل نمی‌کند.",
-                10,
-                Color.rgb(140, 152, 174)
-        ));
+        content.addView(section("پایداری"));
+        TextView stability = makeText(
+                "وقتی دستگاه گرم شود، پنل خودکار به حالت سبک می‌رود.\n" +
+                "تست DNS فقط با درخواست دستی اجرا می‌شود تا فعالیت پس‌زمینه حداقل بماند.",
+                12,
+                Color.WHITE
+        );
+        stability.setBackgroundResource(R.drawable.bg_card);
+        content.addView(stability, marginParams(dp(80)));
 
         scroll.addView(content);
 
         LinearLayout.LayoutParams scrollParams =
-                new LinearLayout.LayoutParams(dp(300), dp(360));
-        scrollParams.topMargin = dp(7);
+                new LinearLayout.LayoutParams(dp(300), dp(364));
+        scrollParams.topMargin = dp(6);
         box.addView(scroll, scrollParams);
 
         Button stop = makeButton("⏹ بستن پنل");
         LinearLayout.LayoutParams stopParams =
-                new LinearLayout.LayoutParams(-1, dp(42));
-        stopParams.topMargin = dp(7);
+                new LinearLayout.LayoutParams(-1, dp(40));
+        stopParams.topMargin = dp(6);
         box.addView(stop, stopParams);
 
         close.setOnClickListener(view -> stopSelf());
         stop.setOnClickListener(view -> stopSelf());
 
-        refresh.setOnClickListener(view -> {
+        Runnable refreshAll = () -> {
             display.setText(displayStats());
             statsText.setText(deviceStats());
-        });
+            thermalInfo.setText(thermalStatusText());
+        };
 
+        refresh.setOnClickListener(view -> refreshAll.run());
         network.setOnClickListener(view -> updateNetworkStatus(network));
         testDns.setOnClickListener(view -> runDnsTest());
-        compact.setOnClickListener(
-                view -> toggleCompact(box, scroll, stop, compact)
+
+        View.OnClickListener toggleListener =
+                view -> toggleCompact(box, scroll, stop, expand, lightweight);
+
+        expand.setOnClickListener(toggleListener);
+        lightweight.setOnClickListener(
+                view -> {
+                    if (!compactMode) {
+                        toggleCompact(box, scroll, stop, expand, lightweight);
+                    }
+                }
         );
 
         panel = box;
@@ -272,10 +300,10 @@ public class OverlayService extends Service {
 
         panelParams = new WindowManager.LayoutParams(
                 dp(320),
-                dp(500),
+                dp(100),
                 type,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT
         );
         panelParams.gravity = Gravity.TOP | Gravity.END;
@@ -283,8 +311,19 @@ public class OverlayService extends Service {
         panelParams.y = dp(70);
 
         windowManager.addView(panel, panelParams);
+
         addDrag(header);
-        animateHeader(title);
+
+        if (!compactMode) {
+            expand.performClick();
+        }
+
+        stopHeaderAnimation(title);
+    }
+
+    private void stopHeaderAnimation(TextView title) {
+        title.animate().cancel();
+        title.setAlpha(1f);
     }
 
     private LinearLayout.LayoutParams marginParams(int height) {
@@ -308,45 +347,37 @@ public class OverlayService extends Service {
             LinearLayout box,
             ScrollView scroll,
             Button stop,
-            Button compact
+            TextView expand,
+            Button lightweight
     ) {
         compactMode = !compactMode;
 
         if (compactMode) {
             box.removeView(scroll);
             box.removeView(stop);
-            compact.setText("▣ عادی");
-            panelParams.height = dp(96);
+            expand.setText("▣");
+            lightweight.setText("⚡ حالت سبک");
+            panelParams.height = dp(100);
+
+            if (stateText != null) {
+                stateText.setText("● حالت سبک فعال • کمترین سربار پنل");
+            }
         } else {
-            int insertIndex = Math.min(3, box.getChildCount());
+            int insertIndex = Math.min(2, box.getChildCount());
             box.addView(scroll, insertIndex);
             box.addView(stop);
-            compact.setText("▣ فشرده");
-            panelParams.height = dp(500);
+            expand.setText("▤");
+            lightweight.setText("✓ سبک فعال");
+            panelParams.height = dp(520);
+
+            if (stateText != null) {
+                stateText.setText("● پنل کامل • اسکرول فعال");
+            }
         }
 
-        windowManager.updateViewLayout(panel, panelParams);
-    }
-
-    private void animateHeader(TextView title) {
-        title.setAlpha(0.72f);
-        title.animate()
-                .alpha(1f)
-                .setDuration(850)
-                .withEndAction(() -> pulse(title))
-                .start();
-    }
-
-    private void pulse(TextView title) {
-        if (panel == null) {
-            return;
+        if (windowManager != null && panel != null) {
+            windowManager.updateViewLayout(panel, panelParams);
         }
-
-        title.animate()
-                .alpha(0.72f)
-                .setDuration(850)
-                .withEndAction(() -> animateHeader(title))
-                .start();
     }
 
     private void addDrag(View handle) {
@@ -375,6 +406,7 @@ public class OverlayService extends Service {
                     if (windowManager != null && panel != null) {
                         windowManager.updateViewLayout(panel, panelParams);
                     }
+
                     return true;
                 }
 
@@ -393,7 +425,8 @@ public class OverlayService extends Service {
 
         return String.format(
                 Locale.US,
-                "نرخ نوسازی نمایشگر: %.0f Hz\nFPS بازی: اندازه‌گیری جعلی انجام نمی‌شود.",
+                "نرخ نوسازی نمایشگر: %.0f Hz\n" +
+                "FPS بازی: این اپ عدد ساختگی یا غیرقابل‌اعتماد نشان نمی‌دهد.",
                 hz
         );
     }
@@ -423,27 +456,98 @@ public class OverlayService extends Service {
                         BatteryManager.BATTERY_PROPERTY_CAPACITY
                 );
 
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        boolean saver = pm != null && pm.isPowerSaveMode();
+
         return String.format(
                 Locale.US,
-                "RAM مصرفی پنل: %d MB\nدما: %.1f°C\nباتری: %d%%",
+                "RAM مصرفی پنل: %d MB\n" +
+                "دما: %.1f°C\n" +
+                "باتری: %d%%\n" +
+                "حالت ذخیره انرژی: %s",
                 memoryInfo.getTotalPss() / 1024,
                 temperatureRaw / 10f,
-                battery
+                battery,
+                saver ? "فعال" : "خاموش"
+        );
+    }
+
+    private String thermalStatusText() {
+        if (Build.VERSION.SDK_INT < 29 || powerManager == null) {
+            return "پایش حرارت: در این نسخه Android در دسترس نیست.";
+        }
+
+        int status = powerManager.getCurrentThermalStatus();
+
+        switch (status) {
+            case PowerManager.THERMAL_STATUS_NONE:
+                return "حرارت: عادی • پنل بدون محدودیت";
+            case PowerManager.THERMAL_STATUS_LIGHT:
+                return "حرارت: کمی بالا • پایش فعال";
+            case PowerManager.THERMAL_STATUS_MODERATE:
+                return "حرارت: متوسط • حالت سبک پیشنهاد می‌شود";
+            case PowerManager.THERMAL_STATUS_SEVERE:
+                return "حرارت: شدید • پنل باید سبک بماند";
+            case PowerManager.THERMAL_STATUS_CRITICAL:
+                return "حرارت: بحرانی • فعالیت پنل باید حداقل باشد";
+            case PowerManager.THERMAL_STATUS_EMERGENCY:
+                return "حرارت: اضطراری • فعالیت اضافه متوقف شود";
+            case PowerManager.THERMAL_STATUS_SHUTDOWN:
+                return "حرارت: خاموشی اضطراری";
+            default:
+                return "حرارت: نامشخص";
+        }
+    }
+
+    private void initThermalMonitor() {
+        if (Build.VERSION.SDK_INT < 29) {
+            return;
+        }
+
+        powerManager = (PowerManager) getSystemService(POWER_SERVICE);
+
+        if (powerManager == null) {
+            return;
+        }
+
+        thermalListener = status -> {
+            if (status >= PowerManager.THERMAL_STATUS_MODERATE) {
+                if (panel != null && !compactMode) {
+                    TextView handle = panel.findViewWithTag("t3r0za_expand");
+                    if (handle instanceof TextView) {
+                        handle.performClick();
+                    }
+                }
+
+                if (stateText != null) {
+                    stateText.post(() ->
+                            stateText.setText(
+                                    "● گرمای دستگاه بالا رفت • پنل خودکار سبک شد"
+                            )
+                    );
+                }
+            }
+        };
+
+        powerManager.addThermalStatusListener(
+                getMainExecutor(),
+                thermalListener
         );
     }
 
     private void updateNetworkStatus(Button target) {
-        android.net.ConnectivityManager manager =
-                (android.net.ConnectivityManager)
-                        getSystemService(Context.CONNECTIVITY_SERVICE);
+        ConnectivityManager manager =
+                (ConnectivityManager) getSystemService(
+                        Context.CONNECTIVITY_SERVICE
+                );
 
         if (manager == null) {
             target.setText("شبکه نامشخص");
             return;
         }
 
-        android.net.Network network = manager.getActiveNetwork();
-        android.net.NetworkCapabilities capabilities =
+        Network network = manager.getActiveNetwork();
+        NetworkCapabilities capabilities =
                 manager.getNetworkCapabilities(network);
 
         if (capabilities == null) {
@@ -454,11 +558,11 @@ public class OverlayService extends Service {
         String type;
 
         if (capabilities.hasTransport(
-                android.net.NetworkCapabilities.TRANSPORT_WIFI
+                NetworkCapabilities.TRANSPORT_WIFI
         )) {
             type = "Wi-Fi";
         } else if (capabilities.hasTransport(
-                android.net.NetworkCapabilities.TRANSPORT_CELLULAR
+                NetworkCapabilities.TRANSPORT_CELLULAR
         )) {
             type = "دیتا";
         } else {
@@ -469,6 +573,10 @@ public class OverlayService extends Service {
     }
 
     private void runDnsTest() {
+        if (compactMode) {
+            return;
+        }
+
         dnsText.setText("در حال تست واقعی 3 DNS...");
 
         executor.execute(() -> {
@@ -507,7 +615,9 @@ public class OverlayService extends Service {
                 result.append("هیچ DNS پاسخی نداد.");
             }
 
-            dnsText.post(() -> dnsText.setText(result.toString()));
+            if (dnsText != null) {
+                dnsText.post(() -> dnsText.setText(result.toString()));
+            }
         });
     }
 
@@ -532,22 +642,26 @@ public class OverlayService extends Service {
             socket.setSoTimeout(1200);
 
             InetAddress address = InetAddress.getByName(server);
-            DatagramPacket packet =
-                    new DatagramPacket(
-                            query,
-                            query.length,
-                            address,
-                            53
-                    );
+
+            DatagramPacket packet = new DatagramPacket(
+                    query,
+                    query.length,
+                    address,
+                    53
+            );
 
             long start = System.nanoTime();
             socket.send(packet);
 
             byte[] buffer = new byte[1024];
-            DatagramPacket response =
-                    new DatagramPacket(buffer, buffer.length);
+
+            DatagramPacket response = new DatagramPacket(
+                    buffer,
+                    buffer.length
+            );
 
             socket.receive(response);
+
             return (System.nanoTime() - start) / 1_000_000;
         } catch (IOException error) {
             return -1;
@@ -561,6 +675,15 @@ public class OverlayService extends Service {
 
     @Override
     public void onDestroy() {
+        if (Build.VERSION.SDK_INT >= 29
+                && powerManager != null
+                && thermalListener != null) {
+            try {
+                powerManager.removeThermalStatusListener(thermalListener);
+            } catch (Exception ignored) {
+            }
+        }
+
         executor.shutdownNow();
 
         if (windowManager != null && panel != null) {
