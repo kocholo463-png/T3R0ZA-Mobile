@@ -1,11 +1,24 @@
-# PANEL T3R0ZA
+# T3R0ZA Mobile
 
-Android mini performance panel for Free Fire sessions.
+Full Android Studio project archive for the T3R0ZA gaming performance companion.
 
-The app focuses on real, observable device information and permitted Android APIs: game launch flow, floating mini panel, display refresh rate, app memory, battery/temperature telemetry, and DNS/network response testing.
+The archive contains the complete source under `T3R0ZA-Mobile/android`.
 
-It does not implement auto-aim, auto-headshot, recoil automation, game-client modification, or anti-cheat bypass.
+## Features
 
-## Build
+- Full dashboard UI instead of a mini-only panel.
+- Free Fire package detection and launch.
+- Device thermal and memory monitoring.
+- Display refresh monitoring.
+- Network latency, jitter and probe-loss tests.
+- DNS benchmark against the selected DNS endpoint.
+- Stable saved DNS selection without silent rotation.
+- Android network settings shortcut for actual user-controlled DNS changes.
+- Manual aim/input calibration controls that do not inject input into Free Fire.
+- Explicit UI states instead of fake FPS or fake "boost" values.
 
-Android Studio can open this Gradle project directly. GitHub Actions builds a debug APK automatically.
+## Platform limits
+
+Normal third-party Android apps cannot directly change another app's internal FPS, recoil, sensitivity or frame pacing. The project does not use root, client modification, auto-headshot or aim-bot behavior.
+
+Build details are inside the archive README.
