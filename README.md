@@ -1,24 +1,21 @@
-# T3R0ZA Mobile
+# T3R0ZA
 
-Full Android Studio project archive for the T3R0ZA gaming performance companion.
+Android companion app for Free Fire sessions.
 
-The archive contains the complete source under `T3R0ZA-Mobile/android`.
-
-## Features
-
-- Full dashboard UI instead of a mini-only panel.
-- Free Fire package detection and launch.
-- Device thermal and memory monitoring.
-- Display refresh monitoring.
-- Network latency, jitter and probe-loss tests.
-- DNS benchmark against the selected DNS endpoint.
-- Stable saved DNS selection without silent rotation.
-- Android network settings shortcut for actual user-controlled DNS changes.
-- Manual aim/input calibration controls that do not inject input into Free Fire.
-- Explicit UI states instead of fake FPS or fake "boost" values.
+## Included
+- Full dashboard UI. No Mini Panel and no in-game overlay.
+- Free Fire package detection and direct launch.
+- Live device telemetry: refresh rate, memory pressure, thermal status, battery and Power Saver.
+- Real network probe for TCP latency, jitter estimate and probe loss.
+- Real DNS benchmark for 1.1.1.1, 8.8.8.8 and 9.9.9.9.
+- Smart DNS selection only before a DNS session when DNS Lock is off.
+- Stable DNS session through Android VpnService with user approval.
+- Session detection using Android Usage Access.
+- Manual aim/sensitivity profile controls without input injection.
+- No root, no client modification, no auto-headshot and no aim-bot.
 
 ## Platform limits
+A normal Android app cannot directly set or read Free Fire's internal FPS, recoil or sensitivity. Values that cannot be controlled by Android are shown as limitations instead of fake Boost controls.
 
-Normal third-party Android apps cannot directly change another app's internal FPS, recoil, sensitivity or frame pacing. The project does not use root, client modification, auto-headshot or aim-bot behavior.
-
-Build details are inside the archive README.
+## Build
+The repository uses GitHub Actions with JDK 17, Android SDK 36 and Gradle 9.6.1.
