@@ -152,8 +152,11 @@ public class OverlayService extends Service {
     }
 
     private float refreshRate() {
-        if (wm != null && wm.getDefaultDisplay() != null) return wm.getDefaultDisplay().getRefreshRate();
-        return getResources().getDisplayMetrics().refreshRate;
+        WindowManager manager = (WindowManager) getSystemService(WINDOW_SERVICE);
+        if (manager != null && manager.getDefaultDisplay() != null) {
+            return manager.getDefaultDisplay().getRefreshRate();
+        }
+        return 0f;
     }
 
     private String deviceStats() {
