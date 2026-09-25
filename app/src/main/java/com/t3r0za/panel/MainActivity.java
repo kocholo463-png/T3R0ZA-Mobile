@@ -90,7 +90,11 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        refreshAll();
+        try {
+            refreshAll();
+        } catch (Throwable error) {
+            safeStatus("وضعیت سیستم روی این MI/HyperOS در دسترس کامل نیست؛ برنامه فعال ماند.");
+        }
     }
 
     private void buildPanel() {
@@ -265,14 +269,45 @@ public class MainActivity extends Activity {
     }
 
     private void refreshAll() {
-        refreshSystemState();
-        refreshGameState();
-        refreshThermalState();
+        try {
+            refreshSystemState();
+        } catch (Throwable error) {
+            systemValue.setText("Display status unavailable.");
+        }
+
+        try {
+            refreshGameState();
+        } catch (Throwable error) {
+            gameValue.setText("Free Fire detection unavailable.");
+        }
+
+        try {
+            refreshThermalState();
+        } catch (Throwable error) {
+            thermalValue.setText("Thermal status unavailable.");
+        }
+    }
+
+    private void safeStatus(String message) {
+        if (actionValue != null) {
+            actionValue.setText(message);
+        }
     }
 
     private Display getDefaultDisplayCompat() {
-        WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-        return wm == null ? null : wm.getDefaultDisplay();
+        try {
+            if (Build.VERSION.SDK_INT >= 30) {
+                Display display = getDisplay();
+                if (display != null) {
+                    return display;
+                }
+            }
+
+            WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+            return wm == null ? null : wm.getDefaultDisplay();
+        } catch (Throwable error) {
+            return null;
+        }
     }
 
     private float maxSupportedRefresh() {
@@ -284,11 +319,16 @@ public class MainActivity extends Activity {
         float max = display.getRefreshRate();
 
         if (Build.VERSION.SDK_INT >= 23) {
-            Display.Mode[] modes = display.getSupportedModes();
-            if (modes != null) {
-                for (Display.Mode mode : modes) {
-                    max = Math.max(max, mode.getRefreshRate());
+            try {
+                Display.Mode[] modes = display.getSupportedModes();
+                if (modes != null) {
+                    for (Display.Mode mode : modes) {
+                        if (mode != null) {
+                            max = Math.max(max, mode.getRefreshRate());
+                        }
+                    }
                 }
+            } catch (Throwable ignored) {
             }
         }
 
@@ -362,7 +402,7 @@ public class MainActivity extends Activity {
                     KEY_MIN_REFRESH,
                     String.format(Locale.US, "%.1f", hz)
             );
-        } catch (SecurityException error) {
+        } catch (Throwable error) {
             success = false;
         }
 
@@ -391,9 +431,12 @@ public class MainActivity extends Activity {
 
     private void applyOwnWindowRefresh(float hz) {
         if (Build.VERSION.SDK_INT >= 21 && hz > 0f) {
-            WindowManager.LayoutParams lp = getWindow().getAttributes();
-            lp.preferredRefreshRate = hz;
-            getWindow().setAttributes(lp);
+            try {
+                WindowManager.LayoutParams lp = getWindow().getAttributes();
+                lp.preferredRefreshRate = hz;
+                getWindow().setAttributes(lp);
+            } catch (Throwable ignored) {
+            }
         }
     }
 
@@ -402,13 +445,20 @@ public class MainActivity extends Activity {
             return;
         }
 
-        String peak = Settings.System.getString(getContentResolver(), KEY_PEAK_REFRESH);
-        String min = Settings.System.getString(getContentResolver(), KEY_MIN_REFRESH);
+        try {
+            String peak = Settings.System.getString(getContentResolver(), KEY_PEAK_REFRESH);
+            String min = Settings.System.getString(getContentResolver(), KEY_MIN_REFRESH);
 
-        prefs.edit()
-                .putString(PREF_OLD_PEAK, peak == null ? "" : peak)
-                .putString(PREF_OLD_MIN, min == null ? "" : min)
-                .apply();
+            prefs.edit()
+                    .putString(PREF_OLD_PEAK, peak == null ? "" : peak)
+                    .putString(PREF_OLD_MIN, min == null ? "" : min)
+                    .apply();
+        } catch (Throwable error) {
+            prefs.edit()
+                    .putString(PREF_OLD_PEAK, "")
+                    .putString(PREF_OLD_MIN, "")
+                    .apply();
+        }
     }
 
     private void restoreRefreshSettings() {
@@ -427,18 +477,23 @@ public class MainActivity extends Activity {
         }
 
         try {
-            Settings.System.putString(
-                    getContentResolver(),
-                    KEY_PEAK_REFRESH,
-                    oldPeak == null || oldPeak.isEmpty() ? null : oldPeak
-            );
-            Settings.System.putString(
-                    getContentResolver(),
-                    KEY_MIN_REFRESH,
-                    oldMin == null || oldMin.isEmpty() ? null : oldMin
-            );
-        } catch (SecurityException error) {
-            actionValue.setText("Restore توسط سیستم رد شد.");
+            if (oldPeak != null && !oldPeak.isEmpty()) {
+                Settings.System.putString(
+                        getContentResolver(),
+                        KEY_PEAK_REFRESH,
+                        oldPeak
+                );
+            }
+
+            if (oldMin != null && !oldMin.isEmpty()) {
+                Settings.System.putString(
+                        getContentResolver(),
+                        KEY_MIN_REFRESH,
+                        oldMin
+                );
+            }
+        } catch (Throwable error) {
+            actionValue.setText("Restore توسط سیستم رد شد؛ برنامه همچنان فعال است.");
             return;
         }
 
@@ -460,8 +515,11 @@ public class MainActivity extends Activity {
 
         try {
             startActivity(intent);
-        } catch (Exception error) {
-            startActivity(new Intent(Settings.ACTION_SETTINGS));
+        } catch (Throwable error) {
+            try {
+                startActivity(new Intent(Settings.ACTION_SETTINGS));
+            } catch (Throwable ignored) {
+            }
         }
     }
 
