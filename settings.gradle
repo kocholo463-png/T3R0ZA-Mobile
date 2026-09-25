@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "T3R0ZA-Mobile"
+rootProject.name = "PANEL T3R0ZA"
 include(":app")
