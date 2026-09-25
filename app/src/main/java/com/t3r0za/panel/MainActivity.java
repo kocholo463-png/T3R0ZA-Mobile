@@ -389,8 +389,7 @@ public class MainActivity extends Activity {
 
         gameValue.setText(
                 "Free Fire: پیدا شد • Game Mode گزارش‌شده توسط سیستم: " + mode
-                        + "
-T3R0ZA کنترل مستقیم Game Mode بازی دیگری را ادعا نمی‌کند."
+                        + "\nT3R0ZA کنترل مستقیم Game Mode بازی دیگری را ادعا نمی‌کند."
         );
     }
 
@@ -431,8 +430,7 @@ T3R0ZA کنترل مستقیم Game Mode بازی دیگری را ادعا نم�
             int thermal = pm.getCurrentThermalStatus();
             thermalValue.setText(
                     "Thermal status: " + thermalLabel(thermal) +
-                            "
-Thermal guard: فعال"
+                            "\nThermal guard: فعال"
             );
         } else {
             thermalValue.setText("Thermal API: در این نسخه اندروید در دسترس نیست.");
