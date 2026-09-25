@@ -1,10 +1,9 @@
 <resources>
-    <color name="bg">#071014</color>
-    <color name="panel">#0D171D</color>
-    <color name="panel2">#101D24</color>
-    <color name="accent">#27D7A5</color>
-    <color name="accent2">#55B7FF</color>
-    <color name="text">#F2F6F8</color>
-    <color name="muted">#8DA0AD</color>
-    <color name="danger">#FF6B6B</color>
+    <color name="bg">#0A0E17</color>
+    <color name="card">#121827</color>
+    <color name="accent">#66E3FF</color>
+    <color name="text">#F2F6FF</color>
+    <color name="muted">#8B97AD</color>
+    <color name="ok">#56E39F</color>
+    <color name="warn">#FFC857</color>
 </resources>
