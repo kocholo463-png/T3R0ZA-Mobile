@@ -1,8 +1,11 @@
-# T3R0ZA Mobile
+# PANEL T3R0ZA
 
-Phone-only Android performance panel.
+Android mini performance panel for Free Fire sessions.
 
-The app launches Free Fire, reads system performance signals, opens supported Android game and battery settings, and never modifies game files or fabricates FPS results.
+The app focuses on real, observable device information and permitted Android APIs: game launch flow, floating mini panel, display refresh rate, app memory, battery/temperature telemetry, and DNS/network response testing.
 
-Build:
-gradle :app:assembleDebug
+It does not implement auto-aim, auto-headshot, recoil automation, game-client modification, or anti-cheat bypass.
+
+## Build
+
+Android Studio can open this Gradle project directly. GitHub Actions builds a debug APK automatically.
