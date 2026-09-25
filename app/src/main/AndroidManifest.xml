@@ -1,8 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
@@ -13,7 +12,9 @@
 
     <application
         android:allowBackup="false"
-        android:label="T3R0ZA"
+        android:icon="@drawable/ic_t3r0za"
+        android:label="@string/app_name"
+        android:resizeableActivity="false"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
@@ -27,16 +28,12 @@
         </activity>
 
         <service
-            android:name=".DnsTunnelService"
-            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:name=".OverlayService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
-            <intent-filter>
-                <action android:name="android.net.VpnService" />
-            </intent-filter>
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="user-controlled DNS session" />
+                android:value="floating performance panel shown over a launched game" />
         </service>
     </application>
 </manifest>
